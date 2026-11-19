@@ -2,6 +2,7 @@ node_modules/
 .expo/
 dist/
 apps/mobile/public/
+apps/mobile/ios/
 apps/api/data/
 apps/api/*.sqlite3*
 apps/api/campus_memory.db
@@ -39,6 +40,13 @@ ios/**/.build/
 ios/**/DerivedData/
 ios/**/*.xcuserdatad/
 ios/**/xcuserdata/
+ios/GuideAI/
+ios/GuideAI.xcodeproj/
+ios/GuideAI.xcworkspace/
+ios/Podfile
+ios/Podfile.lock
+ios/Podfile.properties.json
+ios/.xcode.env
 .swiftpm/
 
 # How2Sign (CC BY-NC 4.0) clips, keypoints and model outputs stay local
