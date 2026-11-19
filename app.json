@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "GuideAI",
+    "slug": "GuideAI",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#263427",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#263427"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.guideai.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "GuideAI uses the camera to describe your surroundings and to read sign language. Video is processed on this device and never stored.",
+        "NSMicrophoneUsageDescription": "GuideAI listens so another person's speech can be captioned and translated into sign language.",
+        "NSLocationWhenInUseUsageDescription": "GuideAI uses your location and heading to guide you along pavements, crossings and traffic.",
+        "NSMotionUsageDescription": "GuideAI uses motion sensors to know which way you are facing while navigating.",
+        "NSSpeechRecognitionUsageDescription": "GuideAI transcribes speech so it can be shown as captions and signed back to you.",
+        "UIBackgroundModes": ["audio", "location"]
+      }
+    },
+    "android": {
+      "package": "com.guideai.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#263427",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
