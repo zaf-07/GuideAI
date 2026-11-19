@@ -1,0 +1,9 @@
+# The gateway relays frames to a hosted vision model and nothing else. No
+# torch, no ultralytics, no OpenCV: every model that matters to safety runs
+# on the phone, so the server has no reason to carry a vision stack.
+fastapi==0.128.8
+uvicorn[standard]==0.38.0
+# h2 gives httpx HTTP/2, which keeps one warm multiplexed connection to
+# Nebius instead of paying connection setup on every frame.
+httpx[http2]==0.28.1
+websockets==15.0.1

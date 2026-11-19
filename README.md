@@ -1,198 +1,137 @@
-# GuideAI
+# GuideLens
 
-A real-time, privacy-first AI vision and sign language ecosystem for blind,
-visually impaired, deaf and deaf-blind people.
+A native iOS accessibility app that commits to **one purpose per user**, chosen
+once during onboarding and never shown as a menu again.
 
-GuideAI is built from two parts:
+- A user with vision impairment gets an app that is only navigation and voice
+  conversation.
+- A user with hearing impairment gets an app that is only sign-language and
+  speech communication.
+- A user with both gets a combined haptic-and-large-text surface.
 
-- **GuideLens** (https://github.com/k1lst1x/GuideLens, MIT) — the on-device
-  engine: YOLOX/YOLO11 object detection in the app, the ASL recognition and
-  translation stack, Shared Sight campus memory, the Electron desktop shell and
-  the native SwiftUI VisionMate client.
-- **GuideAI** — an accessibility-profile-driven app around it (authentication,
-  a branching onboarding flow, a home screen that rebuilds itself around
-  whether the user is blind, deaf or deaf-blind) and the API service behind it:
-  hazard warnings, spoken scene descriptions, sign reading, an assistant that
-  acts only after a spoken yes, family contacts and walking directions.
+After onboarding there is a single full-screen surface with no tab bar, no
+mode switcher and no settings screen. A phone held by someone who cannot see
+it, or glanced at mid-conversation by someone who cannot hear, has room for
+exactly one job.
 
-> **Safety:** assistive companion technology. Not a substitute for a white
-> cane, guide dog, orientation training, mobility aids or medical devices.
+---
 
-## Repository layout
+## Safety
+
+**This is assistive companion technology. It is not a substitute for a white
+cane, a guide dog, orientation-and-mobility training, or any medical device.**
+
+Two rules are structural, not stylistic, and they constrain every line of
+code in this repository:
+
+1. **No network call is ever in the safety loop.** Obstacle detection,
+   distance and collision warning run entirely on the device. If the network
+   dies mid-walk, safety behaviour does not change. The hosted model produces
+   *descriptions*; it never produces *warnings*.
+
+2. **The app never asserts safety.** It may say "pole, two meters, ten
+   o'clock." It may never say "path is clear", "safe to proceed", "nothing
+   ahead", or anything a user could act on as an all-clear. **Absence of
+   detection is not detection of absence.** This is enforced by a test that
+   fails the build: `gateway/tests/test_safety_language.py`.
+
+---
+
+## Layout
 
 ```
-apps/mobile      Expo SDK 58 + expo-router app for iOS, Android and web
-apps/api         FastAPI service (hazard detection, scene descriptions, sign reading, assistant)
-apps/desktop     Electron wrapper around the web build
-VisionMate/      Native SwiftUI iOS 17 client (Apple frameworks only)
-docs/            Memory model, sign-language model and dataset documentation
+ios/        the SwiftUI client — the only client
+gateway/    FastAPI relay to a hosted vision model
+models/     bundled ONNX fingerspelling classifier and PopSign vocabulary
+docs/       design and model documentation
 ```
 
-## Running the app
+The React Native app, the Electron desktop build, the Uni-Sign research
+adapter, the Groq client and the Shared Sight hazard-reporting feature were
+removed from `main`. Nothing was destroyed: all of it is on the **`legacy`**
+branch, at the commit before the surgery.
+
+React Native was removed because it cannot reach `ARFrame.sceneDepth`,
+`PHASE`, `CoreHaptics` or on-device `SFSpeechRecognizer`. Those four APIs are
+the entire product.
+
+Shared Sight was removed because community hazard reporting needs a map, a
+list, a submission form and a moderation story — four screens that the
+single-surface rule has no room for. It is worth revisiting once the core app
+has real users.
+
+---
+
+## The gateway
+
+One WebSocket endpoint. The client opens it when the vision surface loads and
+keeps it warm, because per-frame HTTP would spend 150–300 ms on DNS, TLS and
+connection setup every single frame.
+
+```
+GET  /health          configuration and model IDs
+WS   /v1/narrate      frames in, spoken fragments out
+```
+
+```
+client -> {"type": "narrate",  "frame": "<base64 jpeg>"}
+          {"type": "question", "frame": "<base64 jpeg>", "text": "..."}
+          {"type": "ping"}
+server -> {"type": "delta", "text": "..."}     streamed fragment
+          {"type": "done",  "skipped": bool}   end of one reply
+          {"type": "error", "message": "...", "fatal": bool}
+```
+
+Replies stream. Each delta is relayed the instant it arrives so the client can
+speak sentence by sentence instead of waiting for completion — the difference
+between 1.5 s and about 400 ms of perceived latency.
+
+Most frames should produce `{"done": skipped: true}` and no speech at all.
+Constant chatter is the top complaint about assistive vision apps, so the
+narration prompt answers `SKIP` whenever a frame holds nothing worth saying.
+
+**The API key never reaches the phone.** Every client proves a 256-bit secret
+whose first 128 bits are its public device ID, so the server verifies the
+whole secret without storing anything — no enrolment table, and no way for one
+client to claim another's identity. Request frequency is bounded by layered
+per-session, per-peer and process-wide limits; *spend* is bounded separately
+by a rolling hourly token budget per device, because a client within its rate
+limit can still burn credits indefinitely.
+
+### Running it
 
 ```bash
-npm install
-npm run dev          # Expo dev server
-npm run tunnel       # dev server over https, for testing on a phone
-npm run demo         # same, but production mode — use this on a phone browser
-npm run web          # browser fallback
-npm run typecheck
-npm run test:unit    # engine and memory-graph tests
-```
-
-### Testing in a phone browser
-
-Use `npm run demo`, not `npm run tunnel`. A phone browser holds the whole
-pipeline in one tab — the MediaPipe wasm runtime (14MB), the holistic model
-(13MB), an ONNX detector (11MB) and every video frame — and iOS Safari
-responds to that pressure by killing the tab and reloading the page
-mid-session. The development bundle is 9.3MB unminified with React's
-development build on top; production mode serves 3.0MB of split chunks and
-drops the development overhead, which is usually the difference between a
-stable session and a reloading one.
-
-Sign mode and Bridge are the heaviest routes, because the holistic tracker
-and the word model load together. If a phone browser still reloads there, it
-has run out of headroom for a browser tab and the feature needs a development
-build rather than Safari.
-
-The tunnel is required for camera access: iOS Safari blocks `getUserMedia` on
-plain http, so a LAN address silently fails.
-
-Run these from the repository root. Starting Expo from the root *directly*
-(`npx expo start`) makes it treat the workspace root as the project and fail
-looking for an `App.tsx` that lives in `apps/mobile`; the scripts above enter
-the app directory first.
-
-Because GuideAI bundles ONNX Runtime native code, use an Expo **development
-build** rather than Expo Go:
-
-```bash
-npx eas-cli build --platform ios --profile development
-```
-
-Point the app at a backend before starting Expo:
-
-```bash
-cp .env.example .env     # add GEMINI_API_KEY (or GROQ_API_KEY); never commit it
+cp .env.example .env     # add NEBIUS_API_KEY; never commit it
 docker compose up --build
-export EXPO_PUBLIC_API_URL=http://192.168.1.25:8000   # LAN address, not localhost
+curl http://localhost:8000/health
 ```
 
-## What the API does
-
-Safety-critical detection runs locally; descriptions and reasoning use the
-cloud and always have a local fallback.
-
-| Feature | Route | How it works |
-|---|---|---|
-| Hazard warnings | `POST /v1/track`, `POST /v1/vision/analyze` | A YOLO11 detector names what is in view and where: "Chair ahead, left." Position only, never distance. It does not call the cloud. |
-| Scene description | `POST /v1/describe` | The frame and the detections go to Gemini, then MiniMax, then Groq. If every provider fails, the answer is a sentence built from the detections. |
-| Sign reading | `POST /v1/interpret-sign` | A few frames are matched against a small fixed vocabulary. Low-confidence readings are dropped rather than spoken. This is not full sign-language translation. |
-| Assistant | `POST /v1/assistant` | One sentence in, one spoken reply out: describe, read text, "where am I", walking directions, messages, calls, timers and payments. Intent is decided by plain rules, not a language model. |
-| Family | `/v1/contacts`, `/v1/places` | Contacts and saved places, kept per device. "Tell Mom where I am" prepares a WhatsApp message and waits for a yes. |
-| Walking directions | `POST /v1/location` | OpenStreetMap search and foot routing, spoken turn by turn. Directions never say a crossing is safe. |
-| Voice | `POST /v1/speech`, `POST /v1/speech/transcribe` | Optional natural voice and transcription; without a key the phone's own voice is used. |
-
-Rules the service enforces itself, not the client:
-
-- Nothing leaves on the user's behalf — a message, a call, a payment — without
-  an explicit yes, and a pending request expires after a minute.
-- Payments are simulated unless a Stripe **test** key is set. A live key is
-  refused, and anything over `PAY_MAX_CENTS` is never quoted.
-- Messages are delivered directly only with Twilio credentials, and only a
-  limited number per device per hour; otherwise WhatsApp opens with the text
-  ready and the Send tap stays with the user.
-- Contacts, saved places and pending requests belong to the device that
-  created them. Camera frames and audio are never stored.
-
 ```bash
-cd apps/api
+cd gateway
 pip install -r requirements-dev.txt
-python -m pytest
+pytest -q                # 76 tests
 ```
 
-In the app, **Family** and **Walk with me** on the home screen open the
-contacts and assistant screens. In the browser build the bridge reads
-whole-hand signs on the device from hand landmarks — still handshapes such as
-*I love you*, *peace* and *OK*, and moving signs such as *hello*, *yes*, *no*,
-*please*, *thank you*, *help* and *stop*. Native builds send a few frames to
-the sign-reading route instead.
+The in-process rate limits and token budget assume **one worker**. A
+multi-worker or internet-facing deployment must enforce matching limits at a
+shared gateway, or each worker will allow the full budget by itself.
 
-## How the app reshapes itself
+---
 
-`apps/mobile/src/state/profile.ts` holds the accessibility profile. One answer
-in onboarding — blind/low vision, deaf/hard of hearing, or deaf-blind —
-decides what the rest of the app is:
+## The iOS app
 
-| | Blind / low vision | Deaf / HoH | Deaf-blind |
-|---|---|---|---|
-| Onboarding step 2 | sight level, narration style, speech rate | hearing level, sign language, captions | both, with touch as the main channel |
-| Hero action | Describe my surroundings → `/camera` | Start a conversation → `/bridge` | Deaf-blind bridge → `/bridge` |
-| Tiles | What changed, Shared Sight, walk with me, read this, family | Sign studio, read my signing, practice, alerts, family | feel the room, shared sight, sign studio, braille |
-| Announcements | spoken via `expo-speech` | captions and visuals only | haptic patterns |
+`ios/` opens in Xcode 16+. A physical device is required: the simulator has no
+LiDAR, no real camera, and misleading audio timing, so no measurement taken
+there means anything.
 
-`apps/mobile/app/index.tsx` is the gate: signed out → `/auth`, signed in but
-not set up → `/onboarding/impairment`, otherwise the tailored home. Settings →
-**Change my profile** clears the completion stamp and runs the branch again
-with the current answers pre-filled.
+Build and test on device, and treat the latency targets as acceptance
+criteria rather than aspirations.
 
-Tiles whose engine exists route straight into the GuideLens surfaces
-(`/camera`, `/bridge`, `/translate`, `/hub`, `/record`). Tiles whose engine is
-still missing route to `/feature`, which names the pipeline that belongs
-there rather than pretending to work.
-
-## Memory
-
-GuideAI remembers in a graph: nodes are things worth remembering (places,
-people, objects, hazards, conversation turns), edges are how they relate
-(`co_occurred`, `located_in`, `said_by`, `refers_to`). Recall returns a match
-*with the context around it*, so a brief can say "the bin, by your front door,
-where you also pass the postbox".
-
-The on-device graph is always written and works offline. Sync through
-[Supermemory](https://supermemory.ai) is opt-in via Settings → **Keep memory
-on this device**, and goes through `apps/api` so the Supermemory key never
-ships in the app bundle. The namespace is derived from the device ID the API
-has already verified, which is what isolates one device's memories from
-another's.
-
-```bash
-SUPERMEMORY_API_KEY=sm_...     # blank = on-device only, everything still works
-```
-
-See [docs/MEMORY.md](docs/MEMORY.md) for the model, the capture rules and the
-API contract.
-
-## Mobile source map
-
-```
-app/                 expo-router routes (shell + GuideLens surfaces)
-components/          AssistantHub, HandTracker, SignPlayer, LiveSceneMap, RoomSketchMap
-src/vision.ts        scene briefs, endpoint security, request pacing
-src/assistant.ts     assistant, family contacts and route updates
-src/handSigns.ts     whole-hand sign reader used by the bridge
-src/detector.*       YOLOX/YOLO11 via ONNX Runtime (native + web backends)
-src/asl*             fingerspelling, word transformer, gloss translation, sign poses
-src/campusMemory.ts  Shared Sight observations and Personal Recall
-src/sightIdentity.ts device secret and stable public ID
-src/memory/          the memory graph: model, recall, capture, Supermemory sync
-src/state/           accessibility profile + persistence
-src/theme/           design tokens shared by shell and engine screens
-src/screens/         auth, onboarding, adaptive home, family, assistant, settings, roadmap
-```
-
-## Accessibility rules this codebase follows
-
-- Every interactive element is at least 64pt tall with an explicit
-  `accessibilityLabel`; hints are full sentences.
-- Text scales to 2.4× system size (1.8× for display headings).
-- Nothing is conveyed by colour alone — selection changes shape and fill too.
-- All announcements go through `src/lib/announce.ts`, so VoiceOver users never
-  hear the same line twice at two different speech rates.
+---
 
 ## Attribution
 
-GuideLens is MIT licensed, © 2026 saint. The original notice is kept at
-`LICENSE-GuideLens`, and `THIRD_PARTY_NOTICES.md` lists upstream models and
-datasets. GuideAI's own additions are MIT licensed under `LICENSE`.
+Parts of this repository originate from GuideLens
+(https://github.com/k1lst1x/GuideLens), MIT licensed; the original notice is
+kept at `LICENSE-GuideLens`, and `THIRD_PARTY_NOTICES.md` lists upstream
+models and datasets.

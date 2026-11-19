@@ -1,50 +1,15 @@
 services:
-  api:
-    build:
-      context: ./apps/api
-      args:
-        TORCH_INDEX_URL: "${TORCH_INDEX_URL:-}"
-    ports: ["127.0.0.1:8082:8000"]
+  gateway:
+    build: ./gateway
+    ports:
+      - "8000:8000"
     environment:
-      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
-      GEMINI_MODEL: "${GEMINI_MODEL:-}"
-      MINIMAX_API_KEY: "${MINIMAX_API_KEY:-}"
-      GROQ_API_KEY: "${GROQ_API_KEY:-}"
-      GROQ_VISION_MODEL: "${GROQ_VISION_MODEL:-qwen/qwen3.8-27b}"
-      VISION_PROVIDERS: "${VISION_PROVIDERS:-gemini,minimax,groq}"
-      YOLO_ENABLED: "${YOLO_ENABLED:-true}"
-      YOLO_MODEL: "${YOLO_MODEL:-yolo11n.pt}"
-      YOLO_DEVICE: "${YOLO_DEVICE:-}"
-      YOLO_MIN_CONFIDENCE: "${YOLO_MIN_CONFIDENCE:-0.35}"
-      FAMILY_DB: "/data/family.sqlite3"
-      TWILIO_ACCOUNT_SID: "${TWILIO_ACCOUNT_SID:-}"
-      TWILIO_AUTH_TOKEN: "${TWILIO_AUTH_TOKEN:-}"
-      TWILIO_WHATSAPP_FROM: "${TWILIO_WHATSAPP_FROM:-+14155238886}"
-      MESSAGE_SENDS_PER_HOUR: "${MESSAGE_SENDS_PER_HOUR:-10}"
-      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
-      PAY_MAX_CENTS: "${PAY_MAX_CENTS:-5000}"
-      DEEPGRAM_API_KEY: "${DEEPGRAM_API_KEY:-}"
-      ELEVENLABS_API_KEY: "${ELEVENLABS_API_KEY:-}"
-      SPEECH_VOICE: "${SPEECH_VOICE:-}"
+      NEBIUS_API_KEY: "${NEBIUS_API_KEY:-}"
+      NEBIUS_BASE_URL: "${NEBIUS_BASE_URL:-https://api.studio.nebius.com/v1}"
+      NEBIUS_NARRATION_MODEL: "${NEBIUS_NARRATION_MODEL:-nvidia/Nemotron-3-Nano-Omni}"
+      NEBIUS_DIALOGUE_MODEL: "${NEBIUS_DIALOGUE_MODEL:-Qwen/Qwen3-VL-32B-Instruct}"
+      GUIDELENS_DEVICE_TOKENS_PER_HOUR: "${GUIDELENS_DEVICE_TOKENS_PER_HOUR:-250000}"
+      GUIDELENS_DEVICE_IDS: "${GUIDELENS_DEVICE_IDS:-}"
       SUPERMEMORY_API_KEY: "${SUPERMEMORY_API_KEY:-}"
-      SUPERMEMORY_BASE_URL: "${SUPERMEMORY_BASE_URL:-https://api.supermemory.ai}"
-      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:8081,http://127.0.0.1:8081,http://localhost:8082,http://127.0.0.1:8082}"
-      VISIONMATE_MEMORY_DB: "/data/visionmate_memory.sqlite3"
-      CAMPUS_MEMORY_DB: "/data/campus_memory.sqlite3"
-      SHARED_SIGHT_TOKEN: "${SHARED_SIGHT_TOKEN:-}"
-      SHARED_SIGHT_DEVICE_IDS: "${SHARED_SIGHT_DEVICE_IDS:-}"
-      CAMPUS_ALERT_TTL_HOURS: "${CAMPUS_ALERT_TTL_HOURS:-12}"
-      OBSERVATION_MIN_CONFIDENCE: "${OBSERVATION_MIN_CONFIDENCE:-0.65}"
-      OBSERVATION_VERIFIED_SHARED_MIN_CONFIDENCE: "${OBSERVATION_VERIFIED_SHARED_MIN_CONFIDENCE:-0.40}"
-    volumes:
-      - ultralytics-model-cache:/root/.cache/ultralytics
-      - ./apps/api/models:/models:ro
-      - ./apps/api/data:/data
-    healthcheck:
-      test: ["CMD","python","-c","import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-
-volumes:
-  ultralytics-model-cache:
+      CORS_ORIGINS: "${CORS_ORIGINS:-}"
+    restart: unless-stopped
