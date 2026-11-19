@@ -40,25 +40,22 @@ code in this repository:
 ## Layout
 
 ```
-ios/        the SwiftUI client — the only client
+ios/        the SwiftUI client
 gateway/    FastAPI relay to a hosted vision model
 models/     bundled ONNX fingerspelling classifier and PopSign vocabulary
+apps/       the Expo and web app, its desktop shell, and the API behind it
 docs/       design and model documentation
 ```
 
-The React Native app, the Electron desktop build, the Uni-Sign research
-adapter, the Groq client and the Shared Sight hazard-reporting feature were
-removed from `main`. Nothing was destroyed: all of it is on the **`legacy`**
-branch, at the commit before the surgery.
+`apps/` holds the Expo and web app, the Electron shell, Shared Sight and the
+API they call. They sit alongside the native client; the `legacy` branch still
+marks the tree as it was before the native restructure.
 
-React Native was removed because it cannot reach `ARFrame.sceneDepth`,
-`PHASE`, `CoreHaptics` or on-device `SFSpeechRecognizer`. Those four APIs are
-the entire product.
-
-Shared Sight was removed because community hazard reporting needs a map, a
-list, a submission form and a moderation story — four screens that the
-single-surface rule has no room for. It is worth revisiting once the core app
-has real users.
+The native app exists because React Native cannot reach `ARFrame.sceneDepth`,
+`PHASE`, `CoreHaptics` or on-device `SFSpeechRecognizer`. The two safety rules
+above are enforced for `ios/` and `gateway/`. The web app is a companion and a
+demo surface: its hazard warnings come from `apps/api` over the network, so it
+does not meet rule 1 and must not be relied on while walking.
 
 ---
 
@@ -115,6 +112,45 @@ pytest -q                # 76 tests
 The in-process rate limits and token budget assume **one worker**. A
 multi-worker or internet-facing deployment must enforce matching limits at a
 shared gateway, or each worker will allow the full budget by itself.
+
+---
+
+## The web app and its API
+
+`apps/mobile` is an Expo app that also runs in a browser; `apps/api` is the
+FastAPI service it calls.
+
+| Feature | Route | How it works |
+|---|---|---|
+| Hazard warnings | `POST /v1/track`, `POST /v1/vision/analyze` | A YOLO11 detector names what is in view and where: "Chair ahead, left." Position only, never distance. |
+| Scene description | `POST /v1/describe` | The frame and the detections go to Gemini, then MiniMax, then Groq. If every provider fails, the answer is a sentence built from the detections. |
+| Sign reading | `POST /v1/interpret-sign` | A few frames are matched against a small fixed vocabulary. Low-confidence readings are dropped. This is not full sign-language translation. |
+| Assistant | `POST /v1/assistant` | One sentence in, one spoken reply out: describe, read text, "where am I", walking directions, messages, calls, timers and payments. |
+| Family | `/v1/contacts`, `/v1/places` | Contacts and saved places, kept per device. "Tell Mom where I am" prepares a WhatsApp message and waits for a yes. |
+| Walking directions | `POST /v1/location` | OpenStreetMap search and foot routing, spoken turn by turn. |
+| Memory and Shared Sight | `/v1/recall/*`, `/v1/observations`, `/v1/alerts` | The on-device memory graph, its optional sync, and community hazard reports. |
+
+Nothing leaves on the user's behalf — a message, a call, a payment — without
+an explicit yes. Payments are simulated unless a Stripe test key is set, and a
+live key is refused. Contacts, saved places and pending requests belong to the
+device that created them.
+
+```bash
+npm install
+
+# terminal 1
+cd apps/api
+pip install -r requirements-dev.txt
+python -m pytest                       # 162 tests
+GEMINI_API_KEY=your_key uvicorn main:app --port 8000
+
+# terminal 2, from the repo root
+npm run web                            # or: npm run demo, for a phone browser
+```
+
+`docker compose up --build` starts both services: the gateway on port 8000 and
+`apps/api` on 8082. Run the API with uvicorn as above when using the web app
+locally, because the app expects it on port 8000.
 
 ---
 
