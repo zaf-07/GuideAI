@@ -1,8 +1,28 @@
 import { Asset } from 'expo-asset';
 import { decode } from 'jpeg-js';
 import { analyzeBlockedView } from './blockedView';
-import { InferenceSession, Tensor } from 'onnxruntime-react-native';
+import type { InferenceSession } from 'onnxruntime-react-native';
 import type { DetectionResult, LocalDetection } from './detector.types';
+
+/**
+ * ONNX Runtime is native code. It is absent in Expo Go and in any build where
+ * the module failed to link, and importing it there throws at module scope —
+ * which would take the whole camera route down rather than one feature. Load
+ * it optionally so a missing runtime degrades to backend-only detection,
+ * which `DetectionResult.available: false` already signals to callers.
+ */
+type OrtModule = typeof import('onnxruntime-react-native');
+let ort: OrtModule | null = null;
+try {
+  ort = require('onnxruntime-react-native') as OrtModule;
+} catch {
+  ort = null;
+}
+
+/** True when on-device detection can run at all. */
+export function hasLocalDetector(): boolean {
+  return ort !== null;
+}
 
 const INPUT_SIZE = 416;
 const SCORE_THRESHOLD = 0.5;
@@ -34,7 +54,7 @@ async function getSession() {
       const asset = Asset.fromModule(MODEL);
       await asset.downloadAsync();
       if (!asset.localUri) throw new Error('YOLOX model asset is unavailable');
-      return InferenceSession.create(asset.localUri, {
+      return ort!.InferenceSession.create(asset.localUri, {
         executionProviders: ['xnnpack', 'cpu'],
         logSeverityLevel: 3,
       });
@@ -302,12 +322,15 @@ function letterbox(image: ReturnType<typeof decode>) {
 }
 
 export async function detectObjects(uri: string): Promise<DetectionResult> {
+  if (!ort) return { available: false, detections: [] };
   try {
     const [session, response] = await Promise.all([getSession(), fetch(uri)]);
     const bytes = new Uint8Array(await response.arrayBuffer());
     const image = decode(bytes, { useTArray: true, formatAsRGBA: true });
     const { input, scale, padX, padY } = letterbox(image);
-    const output = await session.run({ images: new Tensor('float32', input, [1, 3, INPUT_SIZE, INPUT_SIZE]) });
+    const output = await session.run({
+      images: new ort!.Tensor('float32', input, [1, 3, INPUT_SIZE, INPUT_SIZE]),
+    });
     const values = output.output.data as Float32Array;
     const detections: LocalDetection[] = [];
     for (let row = 0; row < 3549; row += 1) {

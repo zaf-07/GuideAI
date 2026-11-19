@@ -219,6 +219,11 @@ let sessionPromise: Promise<OrtSession> | null = null;
 let backend: 'webgpu' | 'wasm' | null = null;
 
 /** Which device the local detector runs on, once loaded. */
+/** The browser build always has a runtime available (WebGPU or WASM). */
+export function hasLocalDetector(): boolean {
+  return true;
+}
+
 export function localDetectorBackend() {
   return backend;
 }

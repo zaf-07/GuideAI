@@ -18,6 +18,7 @@ import { glossToEnglish, signWordToEnglish } from '../src/signEnglish';
 import { UtteranceController, initialUtterance, type UtteranceState } from '../src/signUtterance';
 import { useSceneMemory, rememberHazard } from '../src/memory/capture';
 import { useProfile } from '../src/state/ProfileContext';
+import { hasLocalDetector } from '../src/detector';
 import { AssistMode, getApiUrl, hasVisionBackend, interpretSignSequence, useVisionLoop } from '../src/vision';
 import type { VisionObject } from '../src/vision';
 
@@ -137,13 +138,27 @@ export default function CameraScreen() {
     mode,
     Boolean(permission?.granted) && !usesBrowserHandTracking,
   );
-  const fallback: AssistFrame = {
-    title: visionState === 'offline' ? 'Local vision is reconnecting…' : 'Looking for nearby objects…',
-    detail: 'Point the camera at an object and keep it steady for a moment.',
-    speech: 'No objects detected yet.',
-    icon: visionState === 'offline' ? 'cloud-offline-outline' : 'scan-outline',
-    boxes: [],
-  };
+  // With neither an on-device runtime nor a backend there is nothing to
+  // detect with, and a blind user would otherwise be left pointing the camera
+  // at a screen that never says why nothing is happening.
+  const noDetectorAtAll = !hasLocalDetector() && !hasVisionBackend;
+  const fallback: AssistFrame = noDetectorAtAll
+    ? {
+        title: 'Scene detection is unavailable here',
+        detail:
+          'This build has no on-device detector. Open GuideAI in a development build, or set EXPO_PUBLIC_API_URL to a reachable GuideAI server.',
+        speech:
+          'Scene detection is unavailable in this build. Use a development build, or connect a GuideAI server.',
+        icon: 'cloud-offline-outline',
+        boxes: [],
+      }
+    : {
+        title: visionState === 'offline' ? 'Local vision is reconnecting…' : 'Looking for nearby objects…',
+        detail: 'Point the camera at an object and keep it steady for a moment.',
+        speech: 'No objects detected yet.',
+        icon: visionState === 'offline' ? 'cloud-offline-outline' : 'scan-outline',
+        boxes: [],
+      };
   const objectCounts = detections.reduce<Record<string, number>>((counts, item) => {
     counts[item.label] = (counts[item.label] || 0) + 1;
     return counts;

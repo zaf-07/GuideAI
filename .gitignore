@@ -42,3 +42,7 @@ datasets/
 *.pt
 *.pth
 apps/api/third_party/
+
+# Expo CLI writes a tsconfig at whatever it thinks the project root is. In this
+# workspace that lands here, but the only TypeScript project is apps/mobile.
+/tsconfig.json

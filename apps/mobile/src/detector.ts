@@ -16,3 +16,7 @@ export async function warmUpDetector(): Promise<void> {}
 export function localDetectorBackend(): 'webgpu' | 'wasm' | null {
   return null;
 }
+
+export function hasLocalDetector(): boolean {
+  return false;
+}
