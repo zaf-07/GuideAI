@@ -75,6 +75,28 @@ Tiles whose engine exists route straight into the GuideLens surfaces
 still missing route to `/feature`, which names the pipeline that belongs
 there rather than pretending to work.
 
+## Memory
+
+GuideAI remembers in a graph: nodes are things worth remembering (places,
+people, objects, hazards, conversation turns), edges are how they relate
+(`co_occurred`, `located_in`, `said_by`, `refers_to`). Recall returns a match
+*with the context around it*, so a brief can say "the bin, by your front door,
+where you also pass the postbox".
+
+The on-device graph is always written and works offline. Sync through
+[Supermemory](https://supermemory.ai) is opt-in via Settings → **Keep memory
+on this device**, and goes through `apps/api` so the Supermemory key never
+ships in the app bundle. The namespace is derived from the device ID the API
+has already verified, which is what isolates one device's memories from
+another's.
+
+```bash
+SUPERMEMORY_API_KEY=sm_...     # blank = on-device only, everything still works
+```
+
+See [docs/MEMORY.md](docs/MEMORY.md) for the model, the capture rules and the
+API contract.
+
 ## Mobile source map
 
 ```
@@ -85,6 +107,7 @@ src/detector.*       YOLOX/YOLO11 via ONNX Runtime (native + web backends)
 src/asl*             fingerspelling, word transformer, gloss translation, sign poses
 src/campusMemory.ts  Shared Sight observations and Personal Recall
 src/sightIdentity.ts device secret and stable public ID
+src/memory/          the memory graph: model, recall, capture, Supermemory sync
 src/state/           accessibility profile + persistence
 src/theme/           design tokens shared by shell and engine screens
 src/screens/         auth, onboarding, adaptive home, settings, roadmap

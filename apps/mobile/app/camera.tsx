@@ -16,6 +16,8 @@ import {
 } from '../src/campusMemory';
 import { glossToEnglish, signWordToEnglish } from '../src/signEnglish';
 import { UtteranceController, initialUtterance, type UtteranceState } from '../src/signUtterance';
+import { useSceneMemory, rememberHazard } from '../src/memory/capture';
+import { useProfile } from '../src/state/ProfileContext';
 import { AssistMode, getApiUrl, hasVisionBackend, interpretSignSequence, useVisionLoop } from '../src/vision';
 import type { VisionObject } from '../src/vision';
 
@@ -340,6 +342,20 @@ export default function CameraScreen() {
     void Speech.stop();
   }, []);
 
+  const { profile } = useProfile();
+
+  // Fold what the camera sees into the memory graph. Scene mode only: the
+  // sign-reading view is a conversation, not a place.
+  useSceneMemory(profile, {
+    place: campusLocation,
+    objects: (vision?.objects ?? []).map((object) => ({
+      label: object.label,
+      confidence: object.confidence,
+      distance_m: object.distance_m ?? null,
+    })),
+    enabled: !isSignMode,
+  });
+
   useEffect(() => {
     if (isSignMode || !vision?.approaching?.length) return;
     const warning = vision.approaching.map((item) => `${item.label}:${item.distance_m}`).join('|');
@@ -477,6 +493,9 @@ export default function CameraScreen() {
     }
     setSharingSight(true);
     setSightNotice('');
+    // A user-confirmed detection is the strongest signal this feature has:
+    // record it as a hazard the graph should weight above passing objects.
+    candidates.forEach((item) => rememberHazard(profile, item.label, campusLocation));
     try {
       const results = await Promise.allSettled(candidates.map((item) => submitSightObservation({
         zone_id: campusLocation,

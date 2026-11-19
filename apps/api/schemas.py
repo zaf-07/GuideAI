@@ -225,3 +225,50 @@ class SharedSightDashboard(BaseModel):
     # nvidia-smi on the DGX Spark: {"available": bool, "gpus": [...]}.
     gpu: dict[str, object] | None = None
 
+
+class RecallRememberRequest(BaseModel):
+    """One thing worth remembering, on its way to the user's memory graph."""
+
+    content: str = Field(min_length=1, max_length=4000)
+    kind: str = Field(default="object", max_length=32)
+    id: str | None = Field(default=None, max_length=255)
+    supportingContext: str | None = Field(default=None, max_length=1500)
+    metadata: dict[str, str | int | float | bool] = Field(default_factory=dict)
+    date: str | None = Field(default=None, max_length=40)
+
+
+class RecallRememberResponse(BaseModel):
+    id: str
+    status: str
+
+
+class RecallSearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=400)
+    limit: int = Field(default=8, ge=1, le=100)
+    kinds: list[str] = Field(default_factory=list, max_length=8)
+    threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class RecallRelation(BaseModel):
+    id: str
+    text: str
+    relation: str
+
+
+class RecallHit(BaseModel):
+    id: str
+    text: str
+    similarity: float
+    kind: str | None = None
+    metadata: dict = Field(default_factory=dict)
+    updatedAt: str | None = None
+    related: list[RecallRelation] = Field(default_factory=list)
+
+
+class RecallSearchResponse(BaseModel):
+    results: list[RecallHit] = Field(default_factory=list)
+
+
+class RecallStatusResponse(BaseModel):
+    configured: bool
+    reason: str | None = None

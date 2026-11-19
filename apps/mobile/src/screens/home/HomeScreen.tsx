@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Display, GlassCard, GreetingBar, Screen, Text } from '../../components';
@@ -103,12 +103,19 @@ export function HomeScreen() {
         ))}
       </View>
 
-      <GlassCard style={{ marginTop: spacing.lg }}>
+      <Pressable
+        onPress={() => router.push('/memory')}
+        accessibilityRole="button"
+        accessibilityLabel="What GuideAI remembers. Open your memory graph."
+        style={{ marginTop: spacing.lg }}
+      >
+      <GlassCard>
         <View style={styles.row}>
           <Ionicons name="git-network-outline" size={22} color={colors.lime} />
           <Text variant="section" style={{ flex: 1 }}>
             What GuideAI remembers
           </Text>
+          <Ionicons name="chevron-forward" size={20} color={colors.textFaint} />
         </View>
         <Text variant="body" muted>
           {vision
@@ -119,6 +126,7 @@ export function HomeScreen() {
           Memory graph · on this device · {profile.localOnlyMemory ? 'not synced' : 'synced'}
         </Text>
       </GlassCard>
+      </Pressable>
     </Screen>
   );
 }

@@ -15,6 +15,8 @@ services:
       VISION_API_KEY: "${VISION_API_KEY:-}"
       VISION_DISABLE_THINKING: "${VISION_DISABLE_THINKING:-false}"
       GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      SUPERMEMORY_API_KEY: "${SUPERMEMORY_API_KEY:-}"
+      SUPERMEMORY_BASE_URL: "${SUPERMEMORY_BASE_URL:-https://api.supermemory.ai}"
       GROQ_VISION_MODEL: "${GROQ_VISION_MODEL:-qwen/qwen3.8-27b}"
       CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:8081,http://127.0.0.1:8081,http://localhost:8082,http://127.0.0.1:8082}"
       VISIONMATE_MEMORY_DB: "/data/visionmate_memory.sqlite3"

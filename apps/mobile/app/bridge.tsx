@@ -35,6 +35,8 @@ import {
 } from '../src/campusMemory';
 import { initialBridgeSignGate, updateBridgeSignGate } from '../src/bridgeSignGate';
 import { signLabelToPhrase } from '../src/signPhrases';
+import { rememberConversationTurn } from '../src/memory/capture';
+import { useProfile } from '../src/state/ProfileContext';
 import { useVisionLoop } from '../src/vision';
 
 const QUICK_DEAF_SIGNS = [
@@ -94,6 +96,11 @@ function speakable(code: string) {
 
 export default function DeafBlindBridgeScreen() {
   const params = useLocalSearchParams<{ code?: string; role?: string }>();
+  const { profile } = useProfile();
+  // `receive` is a stable callback, so read the profile through a ref rather
+  // than rebuilding the subscription every time a preference changes.
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
   const [permission, requestPermission] = useCameraPermissions();
   const [role, setRole] = useState<DeviceRole | null>(parseRole(params.role));
   const [code, setCode] = useState<string | null>(null);
@@ -151,6 +158,13 @@ export default function DeafBlindBridgeScreen() {
       const key = messageKey(message);
       if (handled.current.has(key)) return;
       handled.current.add(key);
+      // Every turn becomes a conversation memory linked to who signed or
+      // spoke it, so later recall can answer "what did they ask me about?".
+      rememberConversationTurn(profileRef.current, {
+        text: message.text,
+        speaker: message.sender_role === 'deaf' ? 'Signing partner' : 'Speaking partner',
+        signed: message.sender_role === 'deaf',
+      });
       if (!announce || message.from_this_device) return;
       if (message.sender_role === 'deaf' && roleRef.current === 'blind') {
         speak(message.text);

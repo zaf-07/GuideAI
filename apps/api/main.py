@@ -21,6 +21,7 @@ from pydantic import ValidationError
 
 import campus_memory
 import observation_store
+import supermemory_gateway
 from camera_coach import assess_frame
 from depth import (
     DepthAnythingMetric,
@@ -37,6 +38,12 @@ from slam import OrbSlamClient
 from sign_translator import EnglishToSignRequest, EnglishToSignResponse, translate_english_to_asl
 from visualization import RerunView
 from schemas import (
+    RecallHit,
+    RecallRememberRequest,
+    RecallRememberResponse,
+    RecallSearchRequest,
+    RecallSearchResponse,
+    RecallStatusResponse,
     BridgeConversation,
     BridgeMessage,
     BridgeMessageRequest,
@@ -1161,6 +1168,56 @@ async def what_changed(request: Request, body: WhatChangedRequest):
         update_baseline=body.update_baseline if (is_mod or not baseline_exists) else False,
     )
     return WhatChangedResponse.model_validate(result)
+
+
+@app.get("/v1/recall/status", response_model=RecallStatusResponse)
+async def recall_status():
+    """Tell the app whether memory sync is available before it offers it."""
+    if not supermemory_gateway.configured():
+        return RecallStatusResponse(configured=False, reason="SUPERMEMORY_API_KEY is not set on the server")
+    return RecallStatusResponse(configured=True)
+
+
+@app.post("/v1/recall/remember", response_model=RecallRememberResponse)
+async def recall_remember(request: Request, body: RecallRememberRequest):
+    """Mirror one observation into the caller's own Supermemory namespace.
+
+    The namespace comes from the verified device ID, never from the request
+    body, so a client cannot write into another device's memory.
+    """
+    device_id, session_id = _authorize_sight(request)
+    _memory_rate_limit(request, session_id)
+    try:
+        document = supermemory_gateway.build_document(
+            content=body.content,
+            kind=body.kind,
+            document_id=body.id,
+            supporting_context=body.supportingContext,
+            metadata=body.metadata,
+            date=body.date,
+        )
+        result = await supermemory_gateway.ingest(device_id, document)
+    except supermemory_gateway.SupermemoryError as error:
+        raise HTTPException(error.status, str(error)) from error
+    return RecallRememberResponse.model_validate(result)
+
+
+@app.post("/v1/recall/search", response_model=RecallSearchResponse)
+async def recall_search(request: Request, body: RecallSearchRequest):
+    """Relationship-aware recall from the caller's own namespace."""
+    device_id, session_id = _authorize_sight(request)
+    _memory_rate_limit(request, session_id)
+    try:
+        query = supermemory_gateway.build_search(
+            query=body.query,
+            limit=body.limit,
+            kinds=body.kinds,
+            threshold=body.threshold,
+        )
+        results = await supermemory_gateway.search(device_id, query)
+    except supermemory_gateway.SupermemoryError as error:
+        raise HTTPException(error.status, str(error)) from error
+    return RecallSearchResponse(results=[RecallHit.model_validate(hit) for hit in results])
 
 
 def _bridge_call(action, *args, **kwargs):
