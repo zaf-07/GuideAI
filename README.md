@@ -32,10 +32,16 @@ docs/            Device testing, sign-language model and dataset documentation
 ```bash
 npm install
 npm run dev          # Expo dev server
-npm run web          # browser fallback (no native detector)
+npm run tunnel       # dev server over https, for testing on a phone
+npm run web          # browser fallback
 npm run typecheck
-npm run test:unit    # 30 engine tests
+npm run test:unit    # engine and memory-graph tests
 ```
+
+Run these from the repository root. Starting Expo from the root *directly*
+(`npx expo start`) makes it treat the workspace root as the project and fail
+looking for an `App.tsx` that lives in `apps/mobile`; the scripts above enter
+the app directory first.
 
 Because GuideAI bundles ONNX Runtime native code, use an Expo **development
 build** rather than Expo Go:
