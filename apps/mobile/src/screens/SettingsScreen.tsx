@@ -128,9 +128,17 @@ export function SettingsScreen() {
       <GlassCard>
         <Row
           title="Keep memory on this device"
-          caption="Turn off only if you want your memory graph synced across your devices."
+          caption="On, nothing leaves your phone. Off, your memory graph syncs through Supermemory so recall follows you across devices."
           value={profile.localOnlyMemory}
           onChange={(v) => patch({ localOnlyMemory: v })}
+        />
+        <Button
+          label="Review what GuideAI remembers"
+          tone="glass"
+          onPress={() => router.push('/memory')}
+          hint="Opens your memory graph, where you can search and delete entries."
+          style={{ marginTop: spacing.sm }}
+          icon={<Ionicons name="git-network-outline" size={20} color={colors.text} />}
         />
       </GlassCard>
 
