@@ -17,17 +17,26 @@ import { colors, spacing } from '../../theme/tokens';
 const VISION_PRIMARY: Action = {
   key: 'scene',
   title: 'Describe my surroundings',
-  blurb: 'Live object tracking with distance, direction and spoken scene briefs.',
+  blurb: 'Hazard warnings with direction and spoken scene descriptions.',
   icon: 'eye-outline',
   route: '/camera',
   hint: 'Opens the camera and starts speaking what it sees.',
 };
 
+const FAMILY: Action = {
+  key: 'family',
+  title: 'Family',
+  blurb: 'Share where you are with people you trust',
+  icon: 'people-outline',
+  route: '/family',
+};
+
 const VISION_SECONDARY: Action[] = [
   { key: 'changed', title: 'What changed', blurb: 'Only what moved since you were last here', icon: 'git-compare-outline', route: '/hub' },
   { key: 'shared', title: 'Shared sight', blurb: 'Hazards other people reported nearby', icon: 'git-network-outline', route: '/hub' },
-  { key: 'navigate', title: 'Walk with me', blurb: 'Kerbs, crossings and traffic', icon: 'navigate-outline' },
+  { key: 'navigate', title: 'Walk with me', blurb: 'Turn-by-turn walking directions', icon: 'navigate-outline', route: '/assistant' },
   { key: 'read', title: 'Read this', blurb: 'Signs, labels, menus, post', icon: 'document-text-outline' },
+  FAMILY,
 ];
 
 const HEARING_PRIMARY: Action = {
@@ -53,6 +62,7 @@ const HEARING_SECONDARY: Action[] = [
   { key: 'signcam', title: 'Read my signing', blurb: 'Camera reads your hands live', icon: 'videocam-outline', route: '/camera?initialMode=sign' },
   { key: 'practice', title: 'Practice mode', blurb: 'See how clearly you are read', icon: 'school-outline', route: '/record' },
   { key: 'alerts', title: 'Sound alerts', blurb: 'Alarms, doorbells, your name', icon: 'notifications-outline' },
+  FAMILY,
 ];
 
 /** One home screen, shaped by the selected use case. */

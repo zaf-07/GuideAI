@@ -15,7 +15,7 @@ module.exports = {
       bundleIdentifier: 'com.guideai.app',
       infoPlist: {
         NSCameraUsageDescription:
-          'GuideAI uses the camera to describe your surroundings, measure distance to obstacles, and read sign language. Video is processed on this device and never stored.',
+          'GuideAI uses the camera to describe your surroundings, warn about obstacles, and read sign language. Frames are never stored.',
         NSMicrophoneUsageDescription:
           "GuideAI listens so another person's speech can be captioned and translated into sign language.",
         NSSpeechRecognitionUsageDescription:

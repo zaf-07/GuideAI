@@ -120,7 +120,7 @@ export default function CameraScreen() {
         setCameraPermissionError(
           nextPermission.canAskAgain
             ? 'Camera access was not granted. Select Allow in your browser prompt and try again.'
-            : 'Camera access is blocked. Open your browser’s site settings for this page, allow Camera, then reload GuideLens.',
+            : 'Camera access is blocked. Open your browser’s site settings for this page, allow Camera, then reload GuideAI.',
         );
       }
     } catch (error) {

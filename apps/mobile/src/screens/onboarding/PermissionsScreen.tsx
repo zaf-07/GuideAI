@@ -23,7 +23,7 @@ export function PermissionsScreen() {
 
   if (hasVisionTrack(draft)) {
     perms.push(
-      { icon: 'camera-outline', title: 'Camera', why: 'Reads the scene in front of you and measures how far things are.' },
+      { icon: 'camera-outline', title: 'Camera', why: 'Reads the scene in front of you and warns about what is ahead.' },
       { icon: 'navigate-outline', title: 'Location & motion', why: 'Keeps you on the path, and knows which way you are facing at a crossing.' },
     );
   }

@@ -65,16 +65,17 @@ export type VisionResult = {
   objects: VisionObject[];
   task: AssistMode;
   should_speak?: boolean;
+  warnings?: string[];
   approaching?: ApproachingWarning[];
 };
 
 type TrackingResult = {
   objects: VisionObject[];
+  warnings?: string[];
   tracking_latency_ms: number;
-  detector: 'yolo11-botsort' | 'disabled';
+  detector: 'yolo11' | 'disabled';
   metric_depth: boolean;
   camera_coach: CameraCoachResult | null;
-  experimental: true;
   collision_warnings_enabled: false;
   obstacle_points?: number[][];
   obstacle_range_m?: number | null;

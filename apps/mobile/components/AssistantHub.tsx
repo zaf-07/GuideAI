@@ -105,7 +105,7 @@ export default function AssistantHub() {
           ? `No new reports in ${campusLocation}. Still reported: ${changes.previously_seen.slice(0, 5).join(', ')}.`
           : `No reports in ${campusLocation} in the last hour. To check your surroundings, use Changed? on the camera screen.`;
     } catch {
-      message = 'Connect to the GuideLens server to hear what other students reported. To check your surroundings, use Changed? on the camera screen.';
+      message = 'Connect to the GuideAI server to hear what other students reported. To check your surroundings, use Changed? on the camera screen.';
     }
     setDeltaMessage(message);
     if (speechEnabled) {
@@ -126,14 +126,15 @@ export default function AssistantHub() {
       try {
         const health = await fetch(`${base}/health`).then((response) => response.json());
         const dashboard = await getSightDashboard(campusLocation).catch(() => null);
-        const gpu = (health.gpu?.available && health.gpu.gpus?.[0]) || null;
         const rows: Array<[string, string]> = [
           ['Server', `Online · ${base}`],
           ['Scene descriptions', health.configured
-            ? `${health.provider === 'local' ? 'Local vision model (DGX Spark)' : 'Groq cloud'} · ${health.model}`
-            : 'Not configured'],
-          ['Metric depth', health.depth?.ready ? (health.depth?.metric ? 'On (meters)' : 'On (relative only)') : 'Off'],
-          ['GPU', gpu ? `${gpu.name} · ${gpu.utilization_pct ?? '—'}% busy${gpu.memory_used_mb != null ? ` · ${Math.round(gpu.memory_used_mb / 1024)} GB used` : ''}` : 'Not reported by this server'],
+            ? `${(health.vision_providers || []).join(', ')} · ${health.model}`
+            : 'On-device detector only'],
+          ['Hazard detector', health.detector?.state === 'ready'
+            ? `Ready · ${health.detector.model}`
+            : health.detector?.enabled ? 'Starts with the first frame' : 'Off'],
+          ['Family messages', health.messages?.whatsapp === 'direct' ? 'Sent directly' : 'Opens WhatsApp'],
           ['Tracking latency', dashboard?.tracking_latency_ms != null ? `${dashboard.tracking_latency_ms} ms average (5 min)` : 'No recent scans'],
           ['Active phones', dashboard ? String(dashboard.connected_devices) : '—'],
         ];
@@ -978,7 +979,7 @@ export default function AssistantHub() {
 
               <View style={s.settingsHeader}>
                 <Text style={s.settingsHeading}>Live Server</Text>
-                <Text style={s.settingsSub}>Read from the GuideLens server every 5 seconds.</Text>
+                <Text style={s.settingsSub}>Read from the GuideAI server every 5 seconds.</Text>
               </View>
               <View style={s.specCard}>
                 {serverStats.map(([key, value]) => (
