@@ -1,5 +1,7 @@
 import asyncio
+import os
 import unittest
+from pathlib import Path
 
 from backend.app.services import vision
 
@@ -9,6 +11,16 @@ def det(label, x1, x2, conf=0.9, y1=0.2, y2=0.8):
 
 
 class VisionTests(unittest.TestCase):
+    def test_default_detector_uses_bundled_onnx_without_network(self):
+        old = os.environ.pop('YOLO_MODEL', None)
+        try:
+            weights = Path(vision.Detector._weights())
+            self.assertTrue(weights.is_file())
+            self.assertEqual(weights.name, 'yolo11n.onnx')
+        finally:
+            if old is not None:
+                os.environ['YOLO_MODEL'] = old
+
     def test_zone_names_follow_horizontal_position(self):
         self.assertEqual(vision.zone(0.1), 'on the left')
         self.assertEqual(vision.zone(0.3), 'ahead, left')
