@@ -112,7 +112,10 @@ export type VisionPerformance = {
 };
 
 // Local object frames should follow camera movement; cloud narration can update less often.
-const LOCAL_SCAN_INTERVAL_MS = 200;
+// Expo Camera exposes still capture rather than a native frame processor.
+// A sub-second cadence keeps guidance responsive without continuously
+// interrupting the iOS preview or saturating the CPU with JPEG decoding.
+const LOCAL_SCAN_INTERVAL_MS = 450;
 // While the browser detects straight from the video, the scan loop only
 // decides when the server and cloud need a new photo.
 const LIVE_SCAN_INTERVAL_MS = 250;
@@ -177,10 +180,10 @@ function normalizeApiUrl(value: string): string {
 
 export function getApiUrl(): string {
   if (typeof window !== 'undefined' && window.localStorage) {
-    const custom = window.localStorage.getItem('guidelens_api_url');
+    const custom = window.localStorage.getItem('guideeye_api_url');
     if (custom && custom.trim()) {
       const normalized = normalizeApiUrl(custom);
-      if (normalized !== custom.trim().replace(/\/$/, '')) window.localStorage.setItem('guidelens_api_url', normalized);
+      if (normalized !== custom.trim().replace(/\/$/, '')) window.localStorage.setItem('guideeye_api_url', normalized);
       return normalized;
     }
   }
@@ -553,34 +556,43 @@ export function synthesizeLocalSceneResult(
     };
   }
 
-  // 2. Natural spatial narration of detected objects
+  // 2. Natural spatial narration of detected objects with distance awareness
   const ahead = detections.filter((d) => d.direction === 'ahead');
   const left = detections.filter((d) => d.direction === 'left');
   const right = detections.filter((d) => d.direction === 'right');
 
+  const formatDet = (d: LocalDetection) =>
+    typeof d.distance_m === 'number' && Number.isFinite(d.distance_m)
+      ? `${d.label} at ${d.distance_m}m`
+      : d.label;
+
+  const approaching = detections.find((d) => d.is_approaching);
   const parts: string[] = [];
+  if (approaching) {
+    parts.push(`Caution: ${approaching.label} approaching at ${approaching.distance_m ? approaching.distance_m + 'm' : 'close range'}`);
+  }
   if (ahead.length > 0) {
-    parts.push(`Ahead: ${ahead.slice(0, 2).map((d) => d.label).join(', ')}`);
+    parts.push(`Ahead: ${ahead.slice(0, 2).map(formatDet).join(', ')}`);
   }
   if (right.length > 0) {
-    parts.push(`To your right: ${right.slice(0, 2).map((d) => d.label).join(', ')}`);
+    parts.push(`To your right: ${right.slice(0, 2).map(formatDet).join(', ')}`);
   }
   if (left.length > 0) {
-    parts.push(`To your left: ${left.slice(0, 2).map((d) => d.label).join(', ')}`);
+    parts.push(`To your left: ${left.slice(0, 2).map(formatDet).join(', ')}`);
   }
 
   const speech = parts.join('. ') + '.';
   const scene_key = detections
     .slice(0, 4)
-    .map((d) => `${d.label}_${d.direction}`)
+    .map((d) => `${d.label}_${d.direction}_${d.distance_m ?? ''}`)
     .sort()
     .join('|');
 
   return {
-    summary: `Nearby: ${detections.slice(0, 3).map((d) => d.label).join(', ')}`,
+    summary: `Nearby: ${detections.slice(0, 3).map(formatDet).join(', ')}`,
     speech,
     scene_key,
-    urgency: 'low',
+    urgency: approaching ? 'high' : 'low',
     changed: scene_key !== previousSceneKey,
     objects: visionObjects,
     task: mode,
@@ -673,8 +685,9 @@ export function useVisionLoop(camera: RefObject<CameraView | null>, mode: Assist
       // frame, and for the optional server tracker. Sign capture stays at the
       // previous quality to keep its overlapping three-frame windows quick.
       const picture = await camera.current.takePictureAsync({
-        quality: mode === 'scene' ? 0.85 : 0.7,
+        quality: 0.5,
         skipProcessing: true,
+        shutterSound: false,
       });
       if (!picture?.uri) throw new Error('Camera did not return an image');
       const capturedAt = Date.now();
@@ -842,6 +855,7 @@ export function useVisionLoop(camera: RefObject<CameraView | null>, mode: Assist
       }
     } catch (error) {
       if (runGeneration !== generation.current) return;
+      console.warn('[GuideEye vision error]', error);
       failures.current += 1;
       setState('offline');
       const retryAfter = (error as Error & { retryAfter?: number }).retryAfter || 0;

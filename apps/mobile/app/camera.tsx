@@ -60,11 +60,12 @@ function deduplicateConsecutivePhrases(text: string): string {
 }
 
 export default function CameraScreen() {
-  const { initialMode } = useLocalSearchParams<{ initialMode?: string }>();
+  const params = useLocalSearchParams<{ initialMode?: string; mode?: string; pocket?: string }>();
   const [permission, requestPermission] = useCameraPermissions();
   const [cameraPermissionError, setCameraPermissionError] = useState('');
   const [cameraReady, setCameraReady] = useState(false);
-  const [mode, setMode] = useState<AssistMode>(initialMode === 'sign' ? 'sign' : 'scene');
+  const [mode, setMode] = useState<AssistMode>(params.initialMode === 'sign' || params.mode === 'sign' ? 'sign' : 'scene');
+  const [isPocketMode, setIsPocketMode] = useState(params.pocket === 'true');
   const [speaking, setSpeaking] = useState(true);
   const [showLandmarks, setShowLandmarks] = useState(true);
   const [signContext, setSignContext] = useState<SignContextState>(emptySignContext);
@@ -73,7 +74,7 @@ export default function CameraScreen() {
   const [spokenTranslation, setSpokenTranslation] = useState('');
   const [translationError, setTranslationError] = useState('');
   const [captureVersion, setCaptureVersion] = useState(0);
-  const [campusLocation] = useState(() => (typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('guidelens_campus_location') || 'Library Corridor' : 'Library Corridor'));
+  const [campusLocation] = useState(() => (typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('guideeye_campus_location') || 'Library Corridor' : 'Library Corridor'));
   const [activeAlert, setActiveAlert] = useState<CampusAlert | null>(null);
   const [deltaNotice, setDeltaNotice] = useState<string>('');
   const [isCheckingDelta, setIsCheckingDelta] = useState(false);
@@ -121,7 +122,7 @@ export default function CameraScreen() {
         setCameraPermissionError(
           nextPermission.canAskAgain
             ? 'Camera access was not granted. Select Allow in your browser prompt and try again.'
-            : 'Camera access is blocked. Open your browser’s site settings for this page, allow Camera, then reload GuideAI.',
+            : 'Camera access is blocked. Open your browser’s site settings for this page, allow Camera, then reload GuideEye.',
         );
       }
     } catch (error) {
@@ -153,9 +154,9 @@ export default function CameraScreen() {
     ? {
         title: 'Scene detection is unavailable here',
         detail:
-          'This build has no on-device detector. Open GuideAI in a development build, or set EXPO_PUBLIC_API_URL to a reachable GuideAI server.',
+          'This build has no on-device detector. Open GuideEye in a development build, or set EXPO_PUBLIC_API_URL to a reachable GuideEye server.',
         speech:
-          'Scene detection is unavailable in this build. Use a development build, or connect a GuideAI server.',
+          'Scene detection is unavailable in this build. Use a development build, or connect a GuideEye server.',
         icon: 'cloud-offline-outline',
         boxes: [],
       }
@@ -293,7 +294,8 @@ export default function CameraScreen() {
   const speak = (text = current.speech) => {
     if (!speaking || !text.trim()) return;
     Speech.stop();
-    Speech.speak(text, { language: 'en-US', rate: 0.92 });
+    const isRu = /[\u0400-\u04FF]/.test(text);
+    Speech.speak(text, { language: isRu ? 'ru-RU' : 'en-US', rate: 0.95 });
   };
 
   const switchMode = (nextMode: AssistMode) => {
@@ -388,12 +390,12 @@ export default function CameraScreen() {
   }, [isSignMode, vision?.approaching, vision?.speech]);
 
   useEffect(() => {
-    if (isSignMode || !vision?.should_speak || !vision.speech || vision.urgency === 'low') return;
+    if (isSignMode || !vision?.should_speak || !vision.speech) return;
     if (vision.scene_key !== lastObstacleWarning.current) {
       lastObstacleWarning.current = vision.scene_key;
       speak(vision.speech);
     }
-  }, [isSignMode, vision?.should_speak, vision?.speech, vision?.urgency, vision?.scene_key]);
+  }, [isSignMode, vision?.should_speak, vision?.speech, vision?.scene_key]);
 
   // Feed the utterance controller: on every tracker update, and on a timer so
   // a sentence still ends when nothing on screen changes.
@@ -565,7 +567,7 @@ export default function CameraScreen() {
       <SafeAreaView style={c.permission}>
         <View style={c.permissionIcon}><Ionicons name="camera" size={34} color="#B7FF56" /></View>
         <Text style={c.permissionTitle}>Let your camera help communicate</Text>
-        <Text style={c.permissionText}>GuideLens needs camera access for scene assistance and sign-context capture. This prototype does not save video.</Text>
+        <Text style={c.permissionText}>GuideEye needs camera access for scene assistance and sign-context capture. This prototype does not save video.</Text>
         <Pressable onPress={requestCameraAccess} style={c.allow} accessibilityRole="button" accessibilityLabel="Allow camera access">
           <Text style={c.allowText}>Allow camera access</Text>
         </Pressable>
@@ -592,6 +594,7 @@ export default function CameraScreen() {
             style={StyleSheet.absoluteFill}
             facing="back"
             zoom={0}
+            animateShutter={false}
             onCameraReady={() => setCameraReady(true)}
           />
           <View style={c.boxesLayer} pointerEvents="none">
@@ -627,6 +630,20 @@ export default function CameraScreen() {
                         : 'LOCAL YOLO · LIVE'}
             </Text>
           </View>
+          <Pressable
+            accessibilityLabel="Pocket mode"
+            onPress={() => {
+              setIsPocketMode((value) => {
+                const next = !value;
+                Speech.stop();
+                Speech.speak(next ? 'Pocket mode enabled' : 'Standard mode', { language: 'en-US', rate: 1.0 });
+                return next;
+              });
+            }}
+            style={[c.round, isPocketMode && { backgroundColor: '#B7FF56' }]}
+          >
+            <Ionicons name="phone-portrait-outline" size={20} color={isPocketMode ? '#07110F' : '#fff'} />
+          </Pressable>
           <Pressable accessibilityLabel="Toggle spoken output" onPress={() => { setSpeaking((value) => !value); Speech.stop(); }} style={c.round}>
             <Ionicons name={speaking ? 'volume-high' : 'volume-mute'} size={21} color="#fff" />
           </Pressable>
@@ -658,6 +675,40 @@ export default function CameraScreen() {
             <Text style={c.modeTabText}>Bridge</Text>
           </Pressable>
         </View>
+
+        {isPocketMode && (
+          <Pressable
+            style={c.pocketOverlay}
+            onPress={() => {
+              speak(current.speech);
+            }}
+            accessibilityLabel="Pocket mode active. Tap anywhere to repeat surroundings."
+          >
+            <View style={c.pocketBadge}>
+              <Ionicons name="shirt-outline" size={24} color="#B7FF56" />
+              <Text style={c.pocketBadgeText}>CHEST POCKET ACTIVE</Text>
+            </View>
+            <Text style={c.pocketHeading}>
+              {current.title}
+            </Text>
+            <Text style={c.pocketDetail}>
+              {current.detail}
+            </Text>
+            <View style={c.pocketTapHint}>
+              <Ionicons name="hand-right-outline" size={18} color="#B7FF56" />
+              <Text style={c.pocketTapText}>Tap anywhere on the screen to repeat</Text>
+            </View>
+            <Pressable
+              style={c.pocketExitBtn}
+              onPress={(e) => {
+                e.stopPropagation();
+                setIsPocketMode(false);
+              }}
+            >
+              <Text style={c.pocketExitText}>Exit Pocket Mode</Text>
+            </Pressable>
+          </Pressable>
+        )}
 
         {!isSignMode && cameraCoach && (
           <View style={c.coachBanner} accessibilityLiveRegion="polite">
@@ -809,7 +860,7 @@ export default function CameraScreen() {
                 </Pressable>
               </View>
             </View>
-          ) : !usesBrowserHandTracking && isSignMode ? (
+          ) : !usesBrowserHandTracking ? (
             <View style={[c.answer, isSignMode && c.signAnswer]}>
               <View style={[c.answerIcon, isSignMode && c.signAnswerIcon]}><Ionicons name={isSignMode ? 'hand-left' : current.icon} size={25} color="#07110F" /></View>
               <View style={c.answerCopy}>
@@ -1257,5 +1308,74 @@ const c = StyleSheet.create({
   },
   controlActive: {
     backgroundColor: '#B7FF56',
+  },
+  pocketOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(7, 17, 15, 0.95)',
+    zIndex: 99,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  pocketBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(183, 255, 86, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  pocketBadgeText: {
+    color: '#B7FF56',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  pocketHeading: {
+    color: '#FFFFFF',
+    fontSize: 26,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  pocketDetail: {
+    color: '#C3CDC2',
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 30,
+  },
+  pocketTapHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  pocketTapText: {
+    color: '#DDE9E4',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  pocketExitBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  pocketExitText: {
+    color: '#8E9B8D',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });

@@ -14,6 +14,15 @@ import type { DetectionResult, LocalDetection } from './detector.types';
 type OrtModule = typeof import('onnxruntime-react-native');
 let ort: OrtModule | null = null;
 
+try {
+  // Keep this optional for Expo Go and web, but actually attach the runtime in
+  // a native GuideEye build. The previous implementation declared `ort` and
+  // never assigned it, leaving a fully linked detector permanently disabled.
+  ort = require('onnxruntime-react-native') as OrtModule;
+} catch {
+  ort = null;
+}
+
 /** True when on-device detection can run at all. */
 export function hasLocalDetector(): boolean {
   return ort !== null;
@@ -42,17 +51,23 @@ for (const stride of [8, 16, 32]) {
 }
 
 let sessionPromise: Promise<InferenceSession> | null = null;
+let lastDetectorError = '';
 
 async function getSession() {
   if (!sessionPromise) {
     sessionPromise = (async () => {
-      const asset = Asset.fromModule(MODEL);
-      await asset.downloadAsync();
-      if (!asset.localUri) throw new Error('YOLOX model asset is unavailable');
-      return ort!.InferenceSession.create(asset.localUri, {
+      const [asset] = await Asset.loadAsync(MODEL);
+      const rawUri = asset.localUri || asset.uri;
+      if (!rawUri) throw new Error('YOLOX model asset is unavailable');
+      const modelPath = decodeURIComponent(rawUri.replace(/^file:\/\//, ''));
+      const session = await ort!.InferenceSession.create(modelPath, {
         executionProviders: ['cpu'],
         logSeverityLevel: 3,
       });
+      console.info(
+        `[GuideEye detector] YOLOX loaded; inputs=${session.inputNames.join(',')}; outputs=${session.outputNames.join(',')}`,
+      );
+      return session;
     })();
   }
   return sessionPromise;
@@ -323,10 +338,18 @@ export async function detectObjects(uri: string): Promise<DetectionResult> {
     const bytes = new Uint8Array(await response.arrayBuffer());
     const image = decode(bytes, { useTArray: true, formatAsRGBA: true });
     const { input, scale, padX, padY } = letterbox(image);
+    const inputName = session.inputNames[0];
+    const outputName = session.outputNames[0];
+    if (!inputName || !outputName) throw new Error('YOLOX model has no input or output names');
     const output = await session.run({
-      images: new ort!.Tensor('float32', input, [1, 3, INPUT_SIZE, INPUT_SIZE]),
+      [inputName]: new ort!.Tensor('float32', input, [1, 3, INPUT_SIZE, INPUT_SIZE]),
     });
-    const values = output.output.data as Float32Array;
+    const tensor = output[outputName];
+    if (!tensor) throw new Error(`YOLOX did not return its ${outputName} output`);
+    const values = tensor.data as Float32Array;
+    if (values.length < GRID.length * 85) {
+      throw new Error(`Unexpected YOLOX output length ${values.length}`);
+    }
     const detections: LocalDetection[] = [];
     for (let row = 0; row < 3549; row += 1) {
       const offset = row * 85;
@@ -358,8 +381,14 @@ export async function detectObjects(uri: string): Promise<DetectionResult> {
     const focused = focusOnObjects(detections);
     const tracked = tracker.update(focused);
     const blocked = analyzeBlockedView(image.data, image.width, { x: 0, y: 0, width: image.width, height: image.height }, tracked);
+    lastDetectorError = '';
     return { available: true, detections: tracked, blocked };
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    if (message !== lastDetectorError) {
+      lastDetectorError = message;
+      console.error(`[GuideEye detector] ${message}`);
+    }
     return { available: false, detections: [] };
   }
 }
@@ -369,7 +398,9 @@ export function detectVideoFrame(_video: unknown): Promise<DetectionResult> | nu
   return null;
 }
 
-export async function warmUpDetector(): Promise<void> {}
+export async function warmUpDetector(): Promise<void> {
+  if (ort) await getSession();
+}
 
 export function localDetectorBackend(): 'webgpu' | 'wasm' | null {
   return null;

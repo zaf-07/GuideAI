@@ -93,7 +93,7 @@ function speakable(code: string) {
 }
 
 export default function DeafBlindBridgeScreen() {
-  const params = useLocalSearchParams<{ code?: string; role?: string }>();
+  const params = useLocalSearchParams<{ code?: string; role?: string; output?: 'avatar' | 'text' | 'both' }>();
   const { profile } = useProfile();
   // `receive` is a stable callback, so read the profile through a ref rather
   // than rebuilding the subscription every time a preference changes.
@@ -101,6 +101,9 @@ export default function DeafBlindBridgeScreen() {
   profileRef.current = profile;
   const [permission, requestPermission] = useCameraPermissions();
   const [role, setRole] = useState<DeviceRole | null>(parseRole(params.role));
+  const [displayMode, setDisplayMode] = useState<'avatar' | 'text' | 'both'>(
+    params.output === 'text' ? 'text' : params.output === 'avatar' ? 'avatar' : 'both',
+  );
   const [code, setCode] = useState<string | null>(null);
   const [joinInput, setJoinInput] = useState(isBridgeCode(params.code) ? params.code : '');
   const [setupError, setSetupError] = useState('');
@@ -195,7 +198,7 @@ export default function DeafBlindBridgeScreen() {
 
   const start = async (chosen: DeviceRole) => {
     if (!bridgeServerConfigured()) {
-      setSetupError('No GuideAI server is set, so two devices cannot connect. Use "This device only", or set the server address in the Hub.');
+      setSetupError('No GuideEye server is set, so two devices cannot connect. Use "This device only", or set the server address in the Hub.');
       return;
     }
     setBusy(true);
@@ -204,7 +207,7 @@ export default function DeafBlindBridgeScreen() {
       enter(conversation.code, chosen, conversation.partner_joined);
       speak(`Your bridge code is ${speakable(conversation.code)}. Share it with your partner.`, 0.9);
     } catch {
-      setSetupError('Could not reach the GuideAI server. Check the connection, or use "This device only".');
+      setSetupError('Could not reach the GuideEye server. Check the connection, or use "This device only".');
     } finally {
       setBusy(false);
     }
@@ -216,7 +219,7 @@ export default function DeafBlindBridgeScreen() {
       return;
     }
     if (!bridgeServerConfigured()) {
-      setSetupError('No GuideAI server is set, so this device cannot join a partner.');
+      setSetupError('No GuideEye server is set, so this device cannot join a partner.');
       return;
     }
     setBusy(true);
@@ -225,7 +228,7 @@ export default function DeafBlindBridgeScreen() {
       enter(conversation.code, chosen, conversation.partner_joined);
       if (chosen !== 'deaf') speak('Connected to your partner.');
     } catch (error) {
-      setSetupError(error instanceof BridgeGoneError ? error.message : 'Could not reach the GuideAI server.');
+      setSetupError(error instanceof BridgeGoneError ? error.message : 'Could not reach the GuideEye server.');
     } finally {
       setBusy(false);
     }
@@ -563,7 +566,7 @@ export default function DeafBlindBridgeScreen() {
               {Platform.OS === 'web' ? (
                 <HandTracker onContextChange={handleContextChange} aslEngineRef={aslEngineRef} showLandmarks />
               ) : permission?.granted ? (
-                <CameraView ref={cameraRef} facing={cameraFacing} style={StyleSheet.absoluteFill} />
+                <CameraView ref={cameraRef} facing={cameraFacing} style={StyleSheet.absoluteFill} animateShutter={false} />
               ) : (
                 <View style={s.cameraFallback}>
                   <Ionicons name="videocam-off" size={32} color="#607B6E" />
@@ -575,7 +578,7 @@ export default function DeafBlindBridgeScreen() {
                   {Platform.OS === 'web'
                     ? 'Sign with hands in frame or pick a sign:'
                     : !bridgeServerConfigured() || nativeSignState === 'offline'
-                      ? 'Sign decoding needs the GuideAI server. Use a quick sign or type:'
+                      ? 'Sign decoding needs the GuideEye server. Use a quick sign or type:'
                       : 'Reading your signed phrase… or use a quick sign:'}
                 </Text>
                 {Platform.OS !== 'web' && (
@@ -642,11 +645,38 @@ export default function DeafBlindBridgeScreen() {
 
             {role === 'deaf' && (
               <View style={s.giantTextCard}>
-                <Text style={s.giantTextLabel}>YOUR PARTNER SAID:</Text>
-                <Text style={s.giantText} accessibilityLiveRegion="assertive">
-                  {lastBlind ? lastBlind.text.toUpperCase() : 'WAITING FOR A REPLY'}
-                </Text>
-                {lastBlindAsl && lastBlindAsl.tokens.length > 0 && (
+                <View style={s.giantTextHeaderRow}>
+                  <Text style={s.giantTextLabel}>YOUR PARTNER SAID:</Text>
+                  <View style={s.outputModeSwitchRow}>
+                    <Pressable
+                      onPress={() => setDisplayMode('avatar')}
+                      style={[s.outputModeBtn, displayMode === 'avatar' && s.outputModeBtnActive]}
+                    >
+                      <Ionicons name="person" size={11} color={displayMode === 'avatar' ? '#07110F' : '#B7FF56'} />
+                      <Text style={[s.outputModeBtnText, displayMode === 'avatar' && s.outputModeBtnTextActive]}>3D</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setDisplayMode('text')}
+                      style={[s.outputModeBtn, displayMode === 'text' && s.outputModeBtnActive]}
+                    >
+                      <Ionicons name="document-text" size={11} color={displayMode === 'text' ? '#07110F' : '#00E5FF'} />
+                      <Text style={[s.outputModeBtnText, displayMode === 'text' && s.outputModeBtnTextActive]}>Captions</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setDisplayMode('both')}
+                      style={[s.outputModeBtn, displayMode === 'both' && s.outputModeBtnActive]}
+                    >
+                      <Text style={[s.outputModeBtnText, displayMode === 'both' && s.outputModeBtnTextActive]}>Both</Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                {(displayMode === 'text' || displayMode === 'both') && (
+                  <Text style={s.giantText} accessibilityLiveRegion="assertive">
+                    {lastBlind ? lastBlind.text.toUpperCase() : 'WAITING FOR A REPLY'}
+                  </Text>
+                )}
+                {(displayMode === 'avatar' || displayMode === 'both') && lastBlindAsl && lastBlindAsl.tokens.length > 0 && (
                   <View style={s.bridgeSignPlayerBox}>
                     <View style={s.bridgeSignPlayerTitleRow}>
                       <Ionicons name="hand-left" size={13} color="#C8FF72" />
@@ -696,11 +726,38 @@ export default function DeafBlindBridgeScreen() {
 
             {role === 'both' && (
               <View style={s.giantTextCard}>
-                <Text style={s.giantTextLabel}>SHOWN TO DEAF PARTNER:</Text>
-                <Text style={s.giantText} accessibilityRole="text" accessibilityLiveRegion="assertive">
-                  {lastBlind ? lastBlind.text.toUpperCase() : 'PRESS A REPLY BELOW OR SPEAK'}
-                </Text>
-                {lastBlindAsl && lastBlindAsl.tokens.length > 0 && (
+                <View style={s.giantTextHeaderRow}>
+                  <Text style={s.giantTextLabel}>SHOWN TO DEAF PARTNER:</Text>
+                  <View style={s.outputModeSwitchRow}>
+                    <Pressable
+                      onPress={() => setDisplayMode('avatar')}
+                      style={[s.outputModeBtn, displayMode === 'avatar' && s.outputModeBtnActive]}
+                    >
+                      <Ionicons name="person" size={11} color={displayMode === 'avatar' ? '#07110F' : '#B7FF56'} />
+                      <Text style={[s.outputModeBtnText, displayMode === 'avatar' && s.outputModeBtnTextActive]}>3D</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setDisplayMode('text')}
+                      style={[s.outputModeBtn, displayMode === 'text' && s.outputModeBtnActive]}
+                    >
+                      <Ionicons name="document-text" size={11} color={displayMode === 'text' ? '#07110F' : '#00E5FF'} />
+                      <Text style={[s.outputModeBtnText, displayMode === 'text' && s.outputModeBtnTextActive]}>Captions</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setDisplayMode('both')}
+                      style={[s.outputModeBtn, displayMode === 'both' && s.outputModeBtnActive]}
+                    >
+                      <Text style={[s.outputModeBtnText, displayMode === 'both' && s.outputModeBtnTextActive]}>Both</Text>
+                    </Pressable>
+                  </View>
+                </View>
+
+                {(displayMode === 'text' || displayMode === 'both') && (
+                  <Text style={s.giantText} accessibilityRole="text" accessibilityLiveRegion="assertive">
+                    {lastBlind ? lastBlind.text.toUpperCase() : 'PRESS A REPLY BELOW OR SPEAK'}
+                  </Text>
+                )}
+                {(displayMode === 'avatar' || displayMode === 'both') && lastBlindAsl && lastBlindAsl.tokens.length > 0 && (
                   <View style={s.bridgeSignPlayerBox}>
                     <View style={s.bridgeSignPlayerTitleRow}>
                       <Ionicons name="hand-left" size={13} color="#C8FF72" />
@@ -1015,6 +1072,36 @@ const s = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginVertical: 12,
+  },
+  giantTextHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  outputModeSwitchRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  outputModeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  outputModeBtnActive: {
+    backgroundColor: '#B7FF56',
+  },
+  outputModeBtnText: {
+    color: '#DDE9E4',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  outputModeBtnTextActive: {
+    color: '#07110F',
   },
   giantTextLabel: {
     color: '#8A7A42',

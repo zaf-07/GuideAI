@@ -34,32 +34,32 @@ export function ImpairmentScreen() {
       }
     >
       <Progress step={1} total={TOTAL_STEPS} />
-      <Display lead="How will you" accent="use GuideAI?" />
+      <Display lead="What should GuideAI" accent="make easier?" />
       <Text variant="body" muted style={{ marginBottom: spacing.md }}>
-        Choose the experience you want first. You can switch modes later without
-        losing your settings.
+        Choose the starting point that fits you. You can change it later, and
+        every mode remains available.
       </Text>
 
       <View style={{ gap: spacing.sm }}>
         <ChoiceCard
-          title="Blind or low vision"
-          subtitle="Voice-first surroundings, reading and walking guidance"
+          title="I want to understand my surroundings"
+          subtitle="Camera guidance, spoken descriptions and walking help"
           selected={current === 'vision'}
           onPress={() => choose('vision')}
           hint="Sets up the camera guidance features."
           icon={<Ionicons name="eye-outline" size={28} color={current === 'vision' ? colors.onLight : colors.lime} />}
         />
         <ChoiceCard
-          title="Deaf or hard of hearing"
-          subtitle="Signing, large captions and visual sound alerts"
+          title="I want to communicate without sound"
+          subtitle="Sign language, large captions and flexible replies"
           selected={current === 'hearing'}
           onPress={() => choose('hearing')}
           hint="Sets up the sign language bridge."
           icon={<MaterialCommunityIcons name="hand-wave-outline" size={28} color={current === 'hearing' ? colors.onLight : colors.lime} />}
         />
         <ChoiceCard
-          title="Communicate with someone"
-          subtitle="Translate between speech, text and supported signs"
+          title="I am helping someone communicate"
+          subtitle="A shared bridge between speech, text and supported signs"
           selected={current === 'communicator'}
           onPress={() => choose('communicator')}
           hint="Sets up conversation tools for a hearing person."
@@ -68,7 +68,8 @@ export function ImpairmentScreen() {
       </View>
 
       <Text variant="caption" faint style={{ marginTop: spacing.md }}>
-        Not sure? Choose the closest one. Nothing here is locked in.
+        GuideAI is designed for real conversations, not diagnosis. Choose the
+        experience you want to try first.
       </Text>
     </Screen>
   );
