@@ -1,7 +1,7 @@
 ## GuideLens
 
-Substantial parts of this repository — the vision pipeline, sign language
-stack, Shared Sight memory, FastAPI inference service, Electron desktop shell
+Substantial parts of this repository — the on-device vision pipeline, sign
+language stack, Shared Sight memory and bridge relay, Electron desktop shell
 and the VisionMate native iOS client — originate from **GuideLens**
 (https://github.com/k1lst1x/GuideLens), 1st place winner of the SFBU NVIDIA
 DGX Spark Hackathon 2026, used under the MIT License. See `LICENSE-GuideLens`
@@ -50,8 +50,9 @@ feature experimental and does not claim continuous-ASL translation accuracy.
 
 ## Ultralytics YOLO11
 
-GuideLens bundles `yolo11n.onnx` (web object detection) and `yolo11n.pt`
-(optional server tracking), and uses the Ultralytics package on the server.
+The app bundles `yolo11n.onnx` (web object detection). The server uses the
+Ultralytics package with `yolo11n.pt` for hazard detection; the weights are
+fetched on first use.
 
 - Source: https://github.com/ultralytics/ultralytics
 - License: AGPL-3.0, or an Ultralytics Enterprise licence
@@ -71,3 +72,15 @@ pose and holistic landmarker models downloaded at build time from Google.
 
 The 250-word sign model's input layout was checked against its upstream
 repository; see `docs/sign/SIGN_PIPELINE_AUDIT.md`.
+
+## OpenStreetMap
+
+Place search and addresses come from Nominatim and walking routes from the
+public OSRM foot router, both built on OpenStreetMap data.
+
+- Data: © OpenStreetMap contributors, Open Database License (ODbL) 1.0
+- https://www.openstreetmap.org/copyright
+- Nominatim usage policy: https://operations.osmfoundation.org/policies/nominatim/
+
+The public endpoints are for light use. Run your own instances before any
+deployment beyond a demo.

@@ -3,16 +3,17 @@
 A real-time, privacy-first AI vision and sign language ecosystem for blind,
 visually impaired, deaf and deaf-blind people.
 
-GuideAI merges two codebases:
+GuideAI is built from two parts:
 
-- **GuideLens** (https://github.com/k1lst1x/GuideLens, MIT) — the working
-  engine room: on-device YOLOX/YOLO11 object detection and BoT-SORT tracking,
-  depth and obstacle estimation, the ASL recognition and translation stack,
-  Shared Sight campus memory, the FastAPI inference gateway, the Electron
-  desktop shell and the native SwiftUI VisionMate client.
-- **GuideAI shell** — an accessibility-profile-driven app around it:
-  authentication, a branching onboarding flow, and a home screen that rebuilds
-  itself around whether the user is blind, deaf or deaf-blind.
+- **GuideLens** (https://github.com/k1lst1x/GuideLens, MIT) — the on-device
+  engine: YOLOX/YOLO11 object detection in the app, the ASL recognition and
+  translation stack, Shared Sight campus memory, the Electron desktop shell and
+  the native SwiftUI VisionMate client.
+- **GuideAI** — an accessibility-profile-driven app around it (authentication,
+  a branching onboarding flow, a home screen that rebuilds itself around
+  whether the user is blind, deaf or deaf-blind) and the API service behind it:
+  hazard warnings, spoken scene descriptions, sign reading, an assistant that
+  acts only after a spoken yes, family contacts and walking directions.
 
 > **Safety:** assistive companion technology. Not a substitute for a white
 > cane, guide dog, orientation training, mobility aids or medical devices.
@@ -21,10 +22,10 @@ GuideAI merges two codebases:
 
 ```
 apps/mobile      Expo SDK 58 + expo-router app for iOS, Android and web
-apps/api         FastAPI inference service (YOLO, depth, SLAM, sign decoding)
+apps/api         FastAPI service (hazard detection, scene descriptions, sign reading, assistant)
 apps/desktop     Electron wrapper around the web build
 VisionMate/      Native SwiftUI iOS 17 client (Apple frameworks only)
-docs/            Device testing, sign-language model and dataset documentation
+docs/            Memory model, sign-language model and dataset documentation
 ```
 
 ## Running the app
@@ -73,10 +74,50 @@ npx eas-cli build --platform ios --profile development
 Point the app at a backend before starting Expo:
 
 ```bash
-cp .env.example .env     # add a rotated GROQ_API_KEY; never commit it
+cp .env.example .env     # add GEMINI_API_KEY (or GROQ_API_KEY); never commit it
 docker compose up --build
 export EXPO_PUBLIC_API_URL=http://192.168.1.25:8000   # LAN address, not localhost
 ```
+
+## What the API does
+
+Safety-critical detection runs locally; descriptions and reasoning use the
+cloud and always have a local fallback.
+
+| Feature | Route | How it works |
+|---|---|---|
+| Hazard warnings | `POST /v1/track`, `POST /v1/vision/analyze` | A YOLO11 detector names what is in view and where: "Chair ahead, left." Position only, never distance. It does not call the cloud. |
+| Scene description | `POST /v1/describe` | The frame and the detections go to Gemini, then MiniMax, then Groq. If every provider fails, the answer is a sentence built from the detections. |
+| Sign reading | `POST /v1/interpret-sign` | A few frames are matched against a small fixed vocabulary. Low-confidence readings are dropped rather than spoken. This is not full sign-language translation. |
+| Assistant | `POST /v1/assistant` | One sentence in, one spoken reply out: describe, read text, "where am I", walking directions, messages, calls, timers and payments. Intent is decided by plain rules, not a language model. |
+| Family | `/v1/contacts`, `/v1/places` | Contacts and saved places, kept per device. "Tell Mom where I am" prepares a WhatsApp message and waits for a yes. |
+| Walking directions | `POST /v1/location` | OpenStreetMap search and foot routing, spoken turn by turn. Directions never say a crossing is safe. |
+| Voice | `POST /v1/speech`, `POST /v1/speech/transcribe` | Optional natural voice and transcription; without a key the phone's own voice is used. |
+
+Rules the service enforces itself, not the client:
+
+- Nothing leaves on the user's behalf — a message, a call, a payment — without
+  an explicit yes, and a pending request expires after a minute.
+- Payments are simulated unless a Stripe **test** key is set. A live key is
+  refused, and anything over `PAY_MAX_CENTS` is never quoted.
+- Messages are delivered directly only with Twilio credentials, and only a
+  limited number per device per hour; otherwise WhatsApp opens with the text
+  ready and the Send tap stays with the user.
+- Contacts, saved places and pending requests belong to the device that
+  created them. Camera frames and audio are never stored.
+
+```bash
+cd apps/api
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+In the app, **Family** and **Walk with me** on the home screen open the
+contacts and assistant screens. In the browser build the bridge reads
+whole-hand signs on the device from hand landmarks — still handshapes such as
+*I love you*, *peace* and *OK*, and moving signs such as *hello*, *yes*, *no*,
+*please*, *thank you*, *help* and *stop*. Native builds send a few frames to
+the sign-reading route instead.
 
 ## How the app reshapes itself
 
@@ -88,7 +129,7 @@ decides what the rest of the app is:
 |---|---|---|---|
 | Onboarding step 2 | sight level, narration style, speech rate | hearing level, sign language, captions | both, with touch as the main channel |
 | Hero action | Describe my surroundings → `/camera` | Start a conversation → `/bridge` | Deaf-blind bridge → `/bridge` |
-| Tiles | What changed, Shared Sight, walk with me, read this | Sign studio, read my signing, practice, alerts | feel the room, shared sight, sign studio, braille |
+| Tiles | What changed, Shared Sight, walk with me, read this, family | Sign studio, read my signing, practice, alerts, family | feel the room, shared sight, sign studio, braille |
 | Announcements | spoken via `expo-speech` | captions and visuals only | haptic patterns |
 
 `apps/mobile/app/index.tsx` is the gate: signed out → `/auth`, signed in but
@@ -129,6 +170,8 @@ API contract.
 app/                 expo-router routes (shell + GuideLens surfaces)
 components/          AssistantHub, HandTracker, SignPlayer, LiveSceneMap, RoomSketchMap
 src/vision.ts        scene briefs, endpoint security, request pacing
+src/assistant.ts     assistant, family contacts and route updates
+src/handSigns.ts     whole-hand sign reader used by the bridge
 src/detector.*       YOLOX/YOLO11 via ONNX Runtime (native + web backends)
 src/asl*             fingerspelling, word transformer, gloss translation, sign poses
 src/campusMemory.ts  Shared Sight observations and Personal Recall
@@ -136,7 +179,7 @@ src/sightIdentity.ts device secret and stable public ID
 src/memory/          the memory graph: model, recall, capture, Supermemory sync
 src/state/           accessibility profile + persistence
 src/theme/           design tokens shared by shell and engine screens
-src/screens/         auth, onboarding, adaptive home, settings, roadmap
+src/screens/         auth, onboarding, adaptive home, family, assistant, settings, roadmap
 ```
 
 ## Accessibility rules this codebase follows
