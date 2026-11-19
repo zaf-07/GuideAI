@@ -113,9 +113,22 @@ class Detector:
         configured = os.getenv('YOLO_MODEL')
         if configured:
             return configured
-        bundled = Path(__file__).resolve().parents[2] / 'models' / 'yolo11n.pt'
-        # Ultralytics downloads the weights by name when no local file exists.
-        return str(bundled) if bundled.is_file() else 'yolo11n.pt'
+        backend_root = Path(__file__).resolve().parents[2]
+        repo_root = backend_root.parent
+        # Prefer a checked-in model over Ultralytics' name-based download. A
+        # service that protects a mobility workflow must be explicit when its
+        # detector is unavailable, rather than silently depending on network
+        # access at first camera request. Ultralytics can load an ONNX export
+        # directly through ONNX Runtime.
+        bundled = (
+            backend_root / 'models' / 'yolo11n.pt',
+            backend_root / 'models' / 'yolo11n.onnx',
+            repo_root / 'apps' / 'mobile' / 'assets' / 'models' / 'yolo11n.onnx',
+        )
+        for candidate in bundled:
+            if candidate.is_file():
+                return str(candidate)
+        return 'yolo11n.pt'
 
     def _load(self):
         if self._model is None and self._error is None:
