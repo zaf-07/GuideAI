@@ -1,4 +1,4 @@
-import { access, cp, mkdir, rename, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, readdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -34,8 +34,17 @@ const mediapipeDir = join(publicDir, 'mediapipe');
 await mkdir(join(mediapipeDir, 'wasm'), { recursive: true });
 await mkdir(join(mediapipeDir, 'models'), { recursive: true });
 await cp(join(mediapipeDist, 'vision_bundle.mjs'), join(mediapipeDir, 'vision_bundle.mjs'));
-for (const name of ['vision_wasm_internal.js', 'vision_wasm_internal.wasm', 'vision_wasm_nosimd_internal.js', 'vision_wasm_nosimd_internal.wasm']) {
-  await cp(join(mediapipeDist, 'wasm', name), join(mediapipeDir, 'wasm', name));
+// MediaPipe renames its wasm payloads between minor releases: 1.2.0 shipped
+// `vision_wasm_nosimd_internal.*`, 1.2.3 replaced it with
+// `vision_wasm_module_internal.*`. Copy whatever this version actually ships
+// rather than a hardcoded list, so an upstream rename cannot break the build.
+const wasmSource = join(mediapipeDist, 'wasm');
+const wasmFiles = (await readdir(wasmSource)).filter((name) => /\.(js|mjs|wasm)$/.test(name));
+if (!wasmFiles.some((name) => name.endsWith('vision_wasm_internal.wasm'))) {
+  throw new Error(`MediaPipe wasm runtime missing from ${wasmSource}; sign tracking would fall back to the CDN.`);
+}
+for (const name of wasmFiles) {
+  await cp(join(wasmSource, name), join(mediapipeDir, 'wasm', name));
 }
 const mediapipeModels = {
   'hand_landmarker.task': 'hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
