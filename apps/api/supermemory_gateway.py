@@ -35,6 +35,20 @@ SEARCH_LIMIT_MAX = 100
 # observations, and an unbounded body would be a cheap way to burn credits.
 CONTENT_MAX = 4000
 
+# Supermemory's default "dynamic" dreaming batches documents and defers
+# extraction: measured against the live API, documents ingested that way were
+# still unextracted chunks eight minutes later, so recall returned raw text
+# with no memories and no graph edges. "instant" extracts straight away at the
+# cost of one extra billed operation per document. GuideAI pays that only for
+# the kinds where recall actually matters, and lets routine scenery batch.
+INSTANT_KINDS = frozenset({"hazard", "conversation", "person", "preference"})
+
+# The documented default threshold of 0.3 is far too loose for spoken output:
+# a query about roadworks returned an unrelated conversation at 0.49. Someone
+# who cannot see the screen gets no chance to skim past a bad hit, so weak
+# matches are dropped rather than read aloud.
+DEFAULT_THRESHOLD = 0.55
+
 
 class SupermemoryError(RuntimeError):
     """Raised when the upstream call fails or the gateway is misconfigured."""
@@ -83,13 +97,24 @@ def build_document(
     supporting_context: str | None = None,
     metadata: dict[str, Any] | None = None,
     date: str | None = None,
+    instant: bool | None = None,
 ) -> dict[str, Any]:
-    """Build an ingest body, clamped to the documented field limits."""
+    """Build an ingest body, clamped to the documented field limits.
+
+    `instant` forces immediate extraction. Left as None, it is decided by the
+    kind: things the user will ask about later are extracted now, routine
+    scenery is allowed to batch.
+    """
     text = (content or "").strip()
     if not text:
         raise SupermemoryError("Nothing to remember", status=400)
 
-    body: dict[str, Any] = {"content": text[:CONTENT_MAX], "taskType": "memory"}
+    extract_now = instant if instant is not None else (kind in INSTANT_KINDS)
+    body: dict[str, Any] = {
+        "content": text[:CONTENT_MAX],
+        "taskType": "memory",
+        "dreaming": "instant" if extract_now else "dynamic",
+    }
     if document_id:
         body["id"] = document_id[:DOCUMENT_ID_MAX]
     if supporting_context:
@@ -126,6 +151,7 @@ def build_search(
         "limit": max(1, min(int(limit or 8), SEARCH_LIMIT_MAX)),
         "searchMode": "hybrid",
         "include": {"documents": False, "related": True, "forgotten": False},
+        "threshold": DEFAULT_THRESHOLD,
     }
     if threshold is not None:
         body["threshold"] = max(0.0, min(float(threshold), 1.0))
@@ -138,12 +164,35 @@ def build_search(
     return body
 
 
+def _dedupe_key(text: str) -> str:
+    """Loose identity for a line of text, for spotting restatements."""
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _is_restatement(a: str, b: str) -> bool:
+    """True when two results say the same thing.
+
+    Hybrid search returns a source chunk and the memory extracted from it as
+    separate results, with near-identical text. Read aloud, that is the same
+    fact twice.
+    """
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    return len(shorter) >= 12 and shorter in longer
+
+
 def normalize_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     """Flatten Supermemory's response into the shape the app expects.
 
     In hybrid mode a result carries either `memory` or `chunk`, so branch on
-    field presence rather than assuming one. Related memories arrive grouped
-    as parents/children/siblings; those group names are the relation.
+    field presence rather than assuming one. An extracted memory and the chunk
+    it came from both match the same query, so the chunk is dropped in favour
+    of the memory: the memory is the cleaned-up statement, and it is the one
+    that carries graph relations. Related memories arrive grouped as
+    parents/children/siblings; those group names are the relation.
     """
     out: list[dict[str, Any]] = []
     for item in payload.get("results") or []:
@@ -180,9 +229,22 @@ def normalize_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
                 "metadata": metadata,
                 "updatedAt": system.get("updatedAt"),
                 "related": related,
+                "_isMemory": bool(item.get("memory")),
             }
         )
-    return out
+
+    # Extracted memories win over the chunks they were extracted from, then
+    # ties break on similarity. Order within each group is otherwise kept.
+    out.sort(key=lambda hit: (not hit["_isMemory"], -hit["similarity"]))
+    deduped: list[dict[str, Any]] = []
+    for hit in out:
+        key = _dedupe_key(hit["text"])
+        if any(_is_restatement(key, _dedupe_key(kept["text"])) for kept in deduped):
+            continue
+        deduped.append(hit)
+    for hit in deduped:
+        hit.pop("_isMemory", None)
+    return deduped
 
 
 async def _post(path: str, body: dict[str, Any], timeout: float) -> dict[str, Any]:

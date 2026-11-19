@@ -57,6 +57,19 @@ class TestBuildDocument:
         assert len(body["id"]) == gw.DOCUMENT_ID_MAX
         assert len(body["supportingContext"]) == gw.SUPPORTING_CONTEXT_MAX
 
+    def test_recall_critical_kinds_extract_immediately(self):
+        # Measured: documents left to batch were still unextracted chunks
+        # eight minutes later, so a hazard would not be recallable.
+        assert gw.build_document(content="Wet floor", kind="hazard")["dreaming"] == "instant"
+        assert gw.build_document(content="Maria asked", kind="conversation")["dreaming"] == "instant"
+
+    def test_routine_scenery_is_allowed_to_batch(self):
+        assert gw.build_document(content="A bench", kind="object")["dreaming"] == "dynamic"
+
+    def test_instant_can_be_forced_either_way(self):
+        assert gw.build_document(content="x", kind="object", instant=True)["dreaming"] == "instant"
+        assert gw.build_document(content="x", kind="hazard", instant=False)["dreaming"] == "dynamic"
+
     def test_kind_is_recorded_as_filterable_metadata(self):
         body = gw.build_document(content="Wet floor", kind="hazard")
         assert body["metadata"]["kind"] == "hazard"
@@ -74,6 +87,16 @@ class TestBuildSearch:
         body = gw.build_search(query="where is the lift")
         assert body["include"]["related"] is True
         assert body["searchMode"] == "hybrid"
+
+    def test_weak_matches_are_excluded_by_default(self):
+        # The documented default of 0.3 let an unrelated conversation through
+        # at 0.49 on a live query. Spoken output gets no chance to skim.
+        body = gw.build_search(query="roadworks")
+        assert body["threshold"] == gw.DEFAULT_THRESHOLD
+        assert gw.DEFAULT_THRESHOLD > 0.5
+
+    def test_an_explicit_threshold_still_wins(self):
+        assert gw.build_search(query="q", threshold=0.1)["threshold"] == 0.1
 
     def test_blank_query_is_rejected(self):
         with pytest.raises(gw.SupermemoryError) as error:
@@ -141,6 +164,46 @@ class TestNormalizeResults:
         assert hit["updatedAt"] == "2026-11-18T10:00:00Z"
         relations = {r["text"]: r["relation"] for r in hit["related"]}
         assert relations == {"Oak Street": "refers_to", "Crossing": "co_occurred"}
+
+    def test_a_memory_replaces_the_chunk_it_came_from(self):
+        # Hybrid search returns both; read aloud that is the same fact twice.
+        results = gw.normalize_results(
+            {
+                "results": [
+                    {"id": "c", "chunk": "The pedestrian crossing on Oak Street has an audible beeper.", "similarity": 0.70},
+                    {"id": "m", "memory": "Pedestrian crossing on Oak Street has an audible beeper.", "similarity": 0.69},
+                ]
+            }
+        )
+        assert len(results) == 1
+        assert results[0]["id"] == "m", "the extracted memory is the one kept"
+
+    def test_distinct_facts_are_all_kept(self):
+        results = gw.normalize_results(
+            {
+                "results": [
+                    {"id": "a", "memory": "Roadworks on Oak Street", "similarity": 0.8},
+                    {"id": "b", "memory": "The library lift is by the stairs", "similarity": 0.7},
+                ]
+            }
+        )
+        assert len(results) == 2
+
+    def test_results_are_ordered_memories_first_then_by_similarity(self):
+        results = gw.normalize_results(
+            {
+                "results": [
+                    {"id": "chunk", "chunk": "Something entirely different", "similarity": 0.95},
+                    {"id": "weak", "memory": "A weaker but extracted memory", "similarity": 0.60},
+                    {"id": "strong", "memory": "A stronger extracted memory", "similarity": 0.80},
+                ]
+            }
+        )
+        assert [r["id"] for r in results] == ["strong", "weak", "chunk"]
+
+    def test_internal_sorting_flag_never_leaks_to_the_client(self):
+        results = gw.normalize_results({"results": [{"id": "a", "memory": "x y z", "similarity": 0.5}]})
+        assert "_isMemory" not in results[0]
 
     def test_malformed_payloads_do_not_raise(self):
         assert gw.normalize_results({}) == []

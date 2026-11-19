@@ -94,6 +94,43 @@ so plainly on the memory screen, and everything keeps working on-device.
 > Supermemory's v3 and v4 APIs are deprecated and shut down on 2026-12-31.
 > This integration targets v5.
 
+### Measured behaviour
+
+Tested against the live v5 API on 2026-11-19 with synthetic data. Three
+findings changed the integration:
+
+**Extraction is not immediate, and the default defers it a long way.** With
+Supermemory's default `dreaming: "dynamic"`, documents were still unextracted
+chunks eight minutes after ingest: search returned raw text, no memories and
+no graph edges. `dreaming: "instant"` extracted within roughly a minute, at
+the cost of one extra billed operation per document. GuideAI therefore sends
+`instant` only for the kinds a user actually asks about later — `hazard`,
+`conversation`, `person`, `preference` — and lets routine scenery batch
+(`INSTANT_KINDS` in `supermemory_gateway.py`).
+
+**The documented default threshold of 0.3 is too loose for speech.** A query
+for "roadworks pavement" returned an unrelated conversation about a lift at
+similarity 0.49. A sighted user skims past that; someone listening cannot.
+The gateway defaults to `0.55`, which cut that query from three hits to one
+relevant hit.
+
+**Hybrid search returns a fact twice.** An extracted memory and the source
+chunk it came from are separate results with near-identical text, so a brief
+would state the same thing twice. `normalize_results` keeps the memory —
+it is the cleaned-up statement and the one that carries relations — and drops
+the chunk it restates.
+
+**Relations were not observed forming.** `included.related` has exactly the
+shape the gateway maps (`parents`, `children`, `siblings`), but stayed empty
+across every test namespace, including minutes after extraction completed.
+That appears to need a larger corpus or more time than a short test gives.
+Until it fills, **the on-device graph is what supplies relationships**, which
+is the arrangement this design already assumed: Supermemory is a background
+memory layer, not a real-time one, and GuideAI's local-first path never waits
+on it.
+
+Ingest took roughly 700–850ms per document; search returned in about 200ms.
+
 ## What gets captured
 
 | Source | What is recorded | Guard |
