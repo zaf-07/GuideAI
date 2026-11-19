@@ -33,8 +33,6 @@ import {
   type BridgeMessage,
   type BridgeRole,
 } from '../src/campusMemory';
-import { initialBridgeSignGate, updateBridgeSignGate } from '../src/bridgeSignGate';
-import { signLabelToPhrase } from '../src/signPhrases';
 import { rememberConversationTurn } from '../src/memory/capture';
 import { useProfile } from '../src/state/ProfileContext';
 import { useVisionLoop } from '../src/vision';
@@ -135,7 +133,7 @@ export default function DeafBlindBridgeScreen() {
   const handled = useRef<Set<string>>(new Set());
   // Partner state already announced, so joining an occupied room is not said twice.
   const previousPartner = useRef(false);
-  const signGate = useRef(initialBridgeSignGate());
+  const signCount = useRef(0);
   const autoJoinTried = useRef(false);
   const aslEngineRef = useRef<{ backspace: () => string; addSpace: () => string; clearText: () => void } | null>(null);
   const scrollViewRef = useRef<{ scrollToEnd: (options?: { animated?: boolean }) => void } | null>(null);
@@ -192,13 +190,12 @@ export default function DeafBlindBridgeScreen() {
     setCode(nextCode);
     setSync(nextCode === LOCAL_BRIDGE_CODE ? 'local' : 'connecting');
     setSetupError('');
-    signGate.current = initialBridgeSignGate();
     if (nextCode !== LOCAL_BRIDGE_CODE) router.setParams({ code: nextCode, role: nextRole });
   }, []);
 
   const start = async (chosen: DeviceRole) => {
     if (!bridgeServerConfigured()) {
-      setSetupError('No GuideLens server is set, so two devices cannot connect. Use "This device only", or set the server address in the Hub.');
+      setSetupError('No GuideAI server is set, so two devices cannot connect. Use "This device only", or set the server address in the Hub.');
       return;
     }
     setBusy(true);
@@ -207,7 +204,7 @@ export default function DeafBlindBridgeScreen() {
       enter(conversation.code, chosen, conversation.partner_joined);
       speak(`Your bridge code is ${speakable(conversation.code)}. Share it with your partner.`, 0.9);
     } catch {
-      setSetupError('Could not reach the GuideLens server. Check the connection, or use "This device only".');
+      setSetupError('Could not reach the GuideAI server. Check the connection, or use "This device only".');
     } finally {
       setBusy(false);
     }
@@ -219,7 +216,7 @@ export default function DeafBlindBridgeScreen() {
       return;
     }
     if (!bridgeServerConfigured()) {
-      setSetupError('No GuideLens server is set, so this device cannot join a partner.');
+      setSetupError('No GuideAI server is set, so this device cannot join a partner.');
       return;
     }
     setBusy(true);
@@ -228,7 +225,7 @@ export default function DeafBlindBridgeScreen() {
       enter(conversation.code, chosen, conversation.partner_joined);
       if (chosen !== 'deaf') speak('Connected to your partner.');
     } catch (error) {
-      setSetupError(error instanceof BridgeGoneError ? error.message : 'Could not reach the GuideLens server.');
+      setSetupError(error instanceof BridgeGoneError ? error.message : 'Could not reach the GuideAI server.');
     } finally {
       setBusy(false);
     }
@@ -249,7 +246,6 @@ export default function DeafBlindBridgeScreen() {
     setSync('local');
     setPartnerJoined(false);
     setJoinInput('');
-    signGate.current = initialBridgeSignGate();
     router.setParams({ code: undefined, role: undefined } as never);
   };
 
@@ -349,11 +345,10 @@ export default function DeafBlindBridgeScreen() {
 
   const handleContextChange = (state: SignContextState) => {
     setSpelled(state.aslState?.spelledText?.trim() ?? '');
-    const word = state.wordState?.currentWord ?? '';
-    const confidence = state.wordState?.currentConfidence ?? 0;
-    const next = updateBridgeSignGate(signGate.current, state.handCount, word, confidence);
-    signGate.current = next.gate;
-    if (next.shouldSend) handleDeafSigned(signLabelToPhrase(word));
+    const sign = state.handSign;
+    if (!sign || sign.count === signCount.current) return;
+    signCount.current = sign.count;
+    if (sign.word) handleDeafSigned(sign.word.toUpperCase());
   };
 
   const sendTypedSign = () => {
@@ -580,7 +575,7 @@ export default function DeafBlindBridgeScreen() {
                   {Platform.OS === 'web'
                     ? 'Sign with hands in frame or pick a sign:'
                     : !bridgeServerConfigured() || nativeSignState === 'offline'
-                      ? 'Sign decoding needs the GuideLens server. Use a quick sign or type:'
+                      ? 'Sign decoding needs the GuideAI server. Use a quick sign or type:'
                       : 'Reading your signed phrase… or use a quick sign:'}
                 </Text>
                 {Platform.OS !== 'web' && (

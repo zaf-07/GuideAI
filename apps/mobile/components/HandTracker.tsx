@@ -2,6 +2,7 @@
 // or HandTracker.native.tsx at runtime.
 import type { ASLSessionState } from '../src/aslClassifier';
 import type { ASLWordState } from '../src/aslWordClassifier.web';
+import type { HandSignState } from '../src/handSigns';
 
 export type SignContextState = {
   frameCount: number;
@@ -13,6 +14,7 @@ export type SignContextState = {
   faceTracked?: boolean;
   poseTracked?: boolean;
   wordState?: ASLWordState;
+  handSign?: HandSignState;
 };
 
 export type HandTrackerProps = {

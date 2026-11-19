@@ -1,6 +1,7 @@
 import { CSSProperties, useEffect, useRef } from 'react';
 import { ASLGestureEngine, type ASLSessionState } from '../src/aslClassifier';
 import { ASLWordEngine, type ASLWordState } from '../src/aslWordClassifier.web';
+import { HandSignReader, type HandSignState } from '../src/handSigns';
 import { buildSignFeatureFrame } from '../src/signFeatures';
 import { TEMPORAL_FEATURE_COUNT, type RawHolisticFrame, type SignRecorder } from '../src/landmarkRecorder.web';
 
@@ -142,6 +143,7 @@ export type SignContextState = {
   faceTracked?: boolean;
   poseTracked?: boolean;
   wordState?: ASLWordState;
+  handSign?: HandSignState;
 };
 
 type HandTrackerProps = {
@@ -420,6 +422,8 @@ export default function HandTracker({
   const onContextCapturedRef = useRef(onContextCaptured);
   const onAslStateChangeRef = useRef(onAslStateChange);
   const latestWordStateRef = useRef<ASLWordState | undefined>(undefined);
+  const latestHandSignRef = useRef<HandSignState | undefined>(undefined);
+  const handSignReader = useRef(new HandSignReader()).current;
 
   // Initialize ASL Gesture Engine for zero-latency on-device processing
   const aslEngine = useRef<ASLGestureEngine>(
@@ -446,10 +450,11 @@ export default function HandTracker({
         clearText: () => {
           aslEngine.clearText();
           wordEngine.clear();
+          handSignReader.reset();
         },
       };
     }
-  }, [aslEngineRef, aslEngine, wordEngine]);
+  }, [aslEngineRef, aslEngine, wordEngine, handSignReader]);
 
   useEffect(() => {
     onContextChangeRef.current = onContextChange;
@@ -491,9 +496,11 @@ export default function HandTracker({
         faceTracked,
         poseTracked,
         wordState: latestWordStateRef.current,
+        handSign: latestHandSignRef.current,
       };
       const wordState = latestWordStateRef.current;
-      const key = `${frameCount}:${handCount}:${error ?? ''}:${faceTracked}:${poseTracked}:${aslState?.currentLetter ?? ''}:${aslState?.spelledText ?? ''}:${Math.round((aslState?.holdProgress ?? 0) * 10)}:${wordState?.currentWord ?? ''}:${wordState?.phrase ?? ''}:${wordState?.commitCount ?? 0}:${wordState?.phraseComplete ?? false}:${Math.round((wordState?.currentConfidence ?? 0) * 20)}`;
+      const handSign = latestHandSignRef.current;
+      const key = `${frameCount}:${handCount}:${error ?? ''}:${faceTracked}:${poseTracked}:${aslState?.currentLetter ?? ''}:${aslState?.spelledText ?? ''}:${Math.round((aslState?.holdProgress ?? 0) * 10)}:${wordState?.currentWord ?? ''}:${wordState?.phrase ?? ''}:${wordState?.commitCount ?? 0}:${wordState?.phraseComplete ?? false}:${Math.round((wordState?.currentConfidence ?? 0) * 20)}:${handSign?.word ?? ''}:${handSign?.count ?? 0}:${Math.round((handSign?.confidence ?? 0) * 10)}`;
       if (key !== lastContextState) {
         lastContextState = key;
         onContextChangeRef.current?.(next);
@@ -662,6 +669,7 @@ export default function HandTracker({
                 smoothedHandsRef.current = [];
                 currentAslState = aslEngine.processFrame(undefined);
                 wordEngine.processFrame(undefined);
+                latestHandSignRef.current = handSignReader.feed(null, performance.now());
               } else {
                 // Perform instant on-device ASL classification (<0.2ms)
                 const primaryHand = smoothed[0];
@@ -671,6 +679,7 @@ export default function HandTracker({
                   'Right';
 
                 currentAslState = aslEngine.processFrame(primaryHand, handednessCategory);
+                latestHandSignRef.current = handSignReader.feed(primaryHand, performance.now());
 
                 const handednessesArray = results.handedness ?? results.handednesses;
                 const multimodalFrame = createMultimodalFrame(smoothed, handednessesArray, face, pose);
@@ -857,7 +866,7 @@ export default function HandTracker({
       poseDetector?.close();
       holisticDetector?.close();
     };
-  }, [aslEngine, wordEngine]);
+  }, [aslEngine, wordEngine, handSignReader]);
 
   return (
     <div aria-label="Live sign language hand tracking" style={styles.container}>
