@@ -186,15 +186,25 @@ export function getApiUrl(): string {
   }
   const configured = process.env.EXPO_PUBLIC_API_URL ? normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL) : '';
   if (configured) return configured;
-  if (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location?.hostname || '')) {
+  if (browserHostnameIsLoopback()) {
     return 'http://localhost:8000';
   }
   return '';
 }
 
+// React Native exposes `window` as an alias for the global object, but it does
+// not provide the browser Location API. Checking only for `window` therefore
+// crashes the native camera route while this module is being evaluated.
+// `document` is browser-only and is a reliable boundary for this web fallback.
+function browserHostnameIsLoopback(): boolean {
+  if (typeof document === 'undefined') return false;
+  const hostname = document.location?.hostname ?? '';
+  return ['localhost', '127.0.0.1'].includes(hostname);
+}
+
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL ? normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL) : '';
 const API_URL = configuredApiUrl || (
-  typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location?.hostname || '')
+  browserHostnameIsLoopback()
     ? 'http://localhost:8000'
     : ''
 );

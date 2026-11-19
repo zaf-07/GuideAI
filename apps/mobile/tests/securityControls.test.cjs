@@ -69,6 +69,33 @@ test('isSecureEndpoint enforces transport security', () => {
   assert.strictEqual(vision.isSecureEndpoint('ftp://localhost'), false);
 });
 
+test('native globals do not trigger browser hostname access', () => {
+  const previousWindow = global.window;
+  const previousDocument = global.document;
+  try {
+    // React Native exposes `window`, but not the browser Location/Document APIs.
+    global.window = {};
+    delete global.document;
+    const nativeVision = loadTs('src/vision.ts', {
+      './detector': {
+        detectObjects: () => Promise.resolve([]),
+        detectVideoFrame: () => Promise.resolve(null),
+        localDetectorBackend: () => 'stub',
+        warmUpDetector: () => Promise.resolve(),
+      },
+      './detector.types': {},
+      './blockedView': {},
+    });
+    assert.strictEqual(nativeVision.getApiUrl(), '');
+    assert.strictEqual(nativeVision.hasVisionBackend, false);
+  } finally {
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+    if (previousDocument === undefined) delete global.document;
+    else global.document = previousDocument;
+  }
+});
+
 test('tflite startup notice suppression intercepts console.error and LogBox notices', () => {
   const originalError = console.error;
   let calls = [];

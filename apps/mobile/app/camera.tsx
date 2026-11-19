@@ -134,15 +134,21 @@ export default function CameraScreen() {
     }
   };
   const usesBrowserHandTracking = isSignMode && Platform.OS === 'web';
+  // CameraView's still-photo API briefly refreshes the iOS preview. Do not run
+  // the polling capture loop when there is no consumer for those frames: the
+  // previous behavior took an unused photo every 200 ms and made the preview
+  // visibly flicker even though detection was unavailable.
+  const hasFrameAnalyzer = isSignMode ? hasVisionBackend : hasLocalDetector() || hasVisionBackend;
+  const visionEnabled = Boolean(permission?.granted) && cameraReady && !usesBrowserHandTracking && hasFrameAnalyzer;
   const { result: vision, state: visionState, detections, cameraCoach, obstacles, blocked, performance, scanNow } = useVisionLoop(
     cameraRef,
     mode,
-    Boolean(permission?.granted) && cameraReady && !usesBrowserHandTracking,
+    visionEnabled,
   );
   // With neither an on-device runtime nor a backend there is nothing to
   // detect with, and a blind user would otherwise be left pointing the camera
   // at a screen that never says why nothing is happening.
-  const noDetectorAtAll = !hasLocalDetector() && !hasVisionBackend;
+  const noDetectorAtAll = !hasFrameAnalyzer;
   const fallback: AssistFrame = noDetectorAtAll
     ? {
         title: 'Scene detection is unavailable here',
