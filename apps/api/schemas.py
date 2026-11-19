@@ -1,4 +1,4 @@
-"""Pydantic request and response contracts for the VisionMate API."""
+"""Pydantic request and response contracts for the GuideAI API."""
 
 from typing import Literal
 
@@ -13,16 +13,6 @@ class DetectedObject(BaseModel):
     y: float | None = Field(default=None, ge=0, le=1)
     width: float | None = Field(default=None, ge=0, le=1)
     height: float | None = Field(default=None, ge=0, le=1)
-    distance_m: float | None = Field(default=None, gt=0, le=80)
-    relative_proximity: float | None = Field(default=None, ge=0, le=1)
-    track_id: int | None = Field(default=None, ge=1)
-    motion: dict[str, object] | None = None
-    spatial: dict[str, object] | None = None
-
-
-class ApproachingWarning(BaseModel):
-    label: str = Field(max_length=40)
-    distance_m: float = Field(gt=0, le=80)
 
 
 class VisionResult(BaseModel):
@@ -32,34 +22,19 @@ class VisionResult(BaseModel):
     urgency: Literal["low", "medium", "high"]
     changed: bool
     objects: list[DetectedObject] = Field(max_length=8)
-    approaching: list[ApproachingWarning] = Field(default_factory=list, max_length=3)
     task: Literal["scene", "sign"]
-
-
-class CameraCoach(BaseModel):
-    blur: bool
-    poor_lighting: bool
-    overexposed: bool
-    cropped_labels: list[str]
-    sharpness_score: float
-    brightness_score: float
+    should_speak: bool = False
+    warnings: list[str] = Field(default_factory=list, max_length=3)
 
 
 class TrackingResult(BaseModel):
     objects: list[DetectedObject] = Field(max_length=12)
+    warnings: list[str] = Field(default_factory=list, max_length=3)
     tracking_latency_ms: int = Field(ge=0)
-    detector: Literal["yolo11-botsort", "disabled"]
-    metric_depth: bool
-    camera_coach: CameraCoach | None = None
-    experimental: bool = True
+    detector: Literal["yolo11", "disabled"]
+    metric_depth: bool = False
+    camera_coach: None = None
     collision_warnings_enabled: bool = False
-    segmentation: bool = False
-    point_cloud: bool = False
-    camera_pose: dict[str, object] | None = None
-    # Camera-frame [x right, y down, z forward] meters for unlabeled surfaces
-    # (walls, trees, poles) within obstacle_range_m. Estimates from metric depth.
-    obstacle_points: list[list[float]] = Field(default_factory=list, max_length=512)
-    obstacle_range_m: float | None = None
 
 
 class SignSequenceRequest(BaseModel):
@@ -73,28 +48,6 @@ class SignTranslation(BaseModel):
     confidence: float = Field(ge=0, le=1)
     is_final: bool
     should_speak: bool
-
-
-class LandmarkPoint(BaseModel):
-    x: float = Field(ge=-10.0, le=10.0)
-    y: float = Field(ge=-10.0, le=10.0)
-    z: float | None = Field(default=None, ge=-10.0, le=10.0)
-    visibility: float | None = Field(default=None, ge=0.0, le=1.0)
-    presence: float | None = Field(default=None, ge=0.0, le=1.0)
-
-
-class UniSignFrame(BaseModel):
-    pose: list[LandmarkPoint] | None = Field(default=None, max_length=33)
-    left_hand: list[LandmarkPoint] | None = Field(default=None, max_length=21)
-    right_hand: list[LandmarkPoint] | None = Field(default=None, max_length=21)
-    face: list[LandmarkPoint] | None = Field(default=None, max_length=478)
-    timestamp_ms: float | None = Field(default=None, ge=0)
-    confidence_representation: str | None = Field(default=None, max_length=64)
-
-
-class UniSignRawRequest(BaseModel):
-    raw_holistic: list[UniSignFrame] = Field(min_length=1, max_length=256)
-    experimental: bool = False
 
 
 class CampusAlert(BaseModel):

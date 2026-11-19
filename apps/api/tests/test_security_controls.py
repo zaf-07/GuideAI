@@ -13,6 +13,7 @@ from PIL import Image
 
 import main
 import observation_store
+import scene
 from rate_limit import LimitExceeded, LimitRule, SlidingWindowLimiter, TieredSlidingWindowLimiter
 
 
@@ -104,13 +105,13 @@ def test_rotating_session_ids_cannot_bypass_peer_inference_limit(monkeypatch):
     monkeypatch.setattr(main, "_general_limits", TieredSlidingWindowLimiter(
         session=LimitRule(100, 60), peer=LimitRule(3, 60), global_budget=LimitRule(100, 60, max_keys=1),
     ))
-    monkeypatch.setattr(main._yolo_sign_detector, "detect", lambda _body: [])
+    monkeypatch.setattr(scene.detector, "detect", lambda _body: [])
     client = TestClient(main.app)
     statuses = []
     for index in range(4):
         response = client.post(
-            "/v1/detect-sign", headers={"X-Session-ID": f"rotated-{index}"},
-            files={"file": ("frame.png", _png(), "image/png")},
+            "/v1/vision/analyze", headers={"X-Session-ID": f"rotated-{index}"},
+            files={"image": ("frame.png", _png(), "image/png")},
         )
         statuses.append(response.status_code)
     assert statuses[:3] == [200, 200, 200]
@@ -140,25 +141,25 @@ def test_bridge_join_guesses_are_limited_across_rotated_device_ids(monkeypatch):
     assert statuses[2] == 429
 
 
-def test_detect_sign_rejects_oversized_and_unsupported_uploads_before_inference(monkeypatch):
+def test_analyze_rejects_oversized_and_unsupported_uploads_before_inference(monkeypatch):
     calls = []
     monkeypatch.setattr(main, "MAX_IMAGE_BYTES", 8)
-    monkeypatch.setattr(main._yolo_sign_detector, "detect", lambda body: calls.append(body) or [])
+    monkeypatch.setattr(scene.detector, "detect", lambda body: calls.append(body) or [])
     client = TestClient(main.app)
     oversized = client.post(
-        "/v1/detect-sign", headers={"X-Session-ID": "oversized"},
-        files={"file": ("frame.jpg", b"123456789", "image/jpeg")},
+        "/v1/vision/analyze", headers={"X-Session-ID": "oversized"},
+        files={"image": ("frame.jpg", b"123456789", "image/jpeg")},
     )
     unsupported = client.post(
-        "/v1/detect-sign", headers={"X-Session-ID": "unsupported"},
-        files={"file": ("frame.txt", b"x", "text/plain")},
+        "/v1/vision/analyze", headers={"X-Session-ID": "unsupported"},
+        files={"image": ("frame.txt", b"x", "text/plain")},
     )
     assert oversized.status_code == 413
     assert unsupported.status_code == 415
     assert calls == []
 
 
-def test_detect_sign_uses_global_inference_semaphore(monkeypatch):
+def test_analyze_uses_global_inference_semaphore(monkeypatch):
     active = 0
     maximum = 0
     lock = threading.Lock()
@@ -174,7 +175,7 @@ def test_detect_sign_uses_global_inference_semaphore(monkeypatch):
         return []
 
     monkeypatch.setattr(main, "_slots", asyncio.Semaphore(1))
-    monkeypatch.setattr(main._yolo_sign_detector, "detect", slow_detect)
+    monkeypatch.setattr(scene.detector, "detect", slow_detect)
     monkeypatch.setattr(main, "_general_limits", TieredSlidingWindowLimiter(
         session=LimitRule(100, 60), peer=LimitRule(100, 60), global_budget=LimitRule(100, 60, max_keys=1),
     ))
@@ -184,8 +185,8 @@ def test_detect_sign_uses_global_inference_semaphore(monkeypatch):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             return await asyncio.gather(*[
                 client.post(
-                    "/v1/detect-sign", headers={"X-Session-ID": f"valid-{index}"},
-                    files={"file": ("frame.png", _png(), "image/png")},
+                    "/v1/vision/analyze", headers={"X-Session-ID": f"valid-{index}"},
+                    files={"image": ("frame.png", _png(), "image/png")},
                 )
                 for index in range(2)
             ])
@@ -211,15 +212,15 @@ def test_invalid_uploads_do_not_consume_inference_budget(monkeypatch):
         session=LimitRule(10, 60), peer=LimitRule(10, 60), global_budget=LimitRule(1, 60, max_keys=1),
     )
     monkeypatch.setattr(main, "_general_limits", limits)
-    monkeypatch.setattr(main._yolo_sign_detector, "detect", lambda _body: [])
+    monkeypatch.setattr(scene.detector, "detect", lambda _body: [])
     client = TestClient(main.app)
     invalid = client.post(
-        "/v1/detect-sign", headers={"X-Session-ID": "invalid"},
-        files={"file": ("frame.txt", b"invalid", "text/plain")},
+        "/v1/vision/analyze", headers={"X-Session-ID": "invalid"},
+        files={"image": ("frame.txt", b"invalid", "text/plain")},
     )
     valid = client.post(
-        "/v1/detect-sign", headers={"X-Session-ID": "valid"},
-        files={"file": ("frame.png", _png(), "image/png")},
+        "/v1/vision/analyze", headers={"X-Session-ID": "valid"},
+        files={"image": ("frame.png", _png(), "image/png")},
     )
     assert invalid.status_code == 415
     assert valid.status_code == 200
@@ -371,35 +372,3 @@ def test_what_changed_rejects_unbounded_objects(monkeypatch):
     }
     res = client.post("/v1/memory/what-changed", headers=caller, json=oversized)
     assert res.status_code == 422
-
-
-def test_unisign_endpoint_admission_controls(monkeypatch):
-    monkeypatch.setattr(main._unisign_backend, "allow_presence_proxy", True)
-    monkeypatch.setattr(main._unisign_backend, "enabled", True)
-    client = TestClient(main.app)
-
-    # 1. Unauthenticated request rejected with 401
-    valid_payload = {
-        "raw_holistic": [{"pose": [{"x": 0.1, "y": 0.2}]}],
-        "experimental": True,
-    }
-    res = client.post("/v1/unisign/interpret", json=valid_payload)
-    assert res.status_code == 401
-
-    caller = auth("device-unisign")
-
-    # 2. Oversized payload (> 256 frames) rejected by schema validation
-    oversized = {
-        "raw_holistic": [{"pose": [{"x": 0.1, "y": 0.2}]} for _ in range(257)],
-        "experimental": True,
-    }
-    assert client.post("/v1/unisign/interpret", headers=caller, json=oversized).status_code == 422
-
-    # 3. Disabled Uni-Sign returns 503
-    valid_seq = {
-        "raw_holistic": [{"pose": [{"x": 0.1, "y": 0.2}], "left_hand": []}],
-        "experimental": True,
-    }
-    monkeypatch.setattr(main._unisign_backend, "enabled", False)
-    assert client.post("/v1/unisign/interpret", headers=caller, json=valid_seq).status_code == 503
-

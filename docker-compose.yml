@@ -3,21 +3,31 @@ services:
     build:
       context: ./apps/api
       args:
-        # Empty: the PyTorch build pip picks for this platform. Set to e.g.
-        # https://download.pytorch.org/whl/cu130 to pin a CUDA build.
         TORCH_INDEX_URL: "${TORCH_INDEX_URL:-}"
-    # Bind to loopback by default to avoid exposing cleartext HTTP over the LAN.
-    # For remote network access, terminate TLS using a reverse proxy (e.g., Caddy or Nginx with HTTPS).
     ports: ["127.0.0.1:8082:8000"]
     environment:
-      VISION_API_URL: "${VISION_API_URL:-https://api.groq.com/openai/v1/chat/completions}"
-      VISION_MODEL: "${VISION_MODEL:-}"
-      VISION_API_KEY: "${VISION_API_KEY:-}"
-      VISION_DISABLE_THINKING: "${VISION_DISABLE_THINKING:-false}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-}"
+      MINIMAX_API_KEY: "${MINIMAX_API_KEY:-}"
       GROQ_API_KEY: "${GROQ_API_KEY:-}"
+      GROQ_VISION_MODEL: "${GROQ_VISION_MODEL:-qwen/qwen3.8-27b}"
+      VISION_PROVIDERS: "${VISION_PROVIDERS:-gemini,minimax,groq}"
+      YOLO_ENABLED: "${YOLO_ENABLED:-true}"
+      YOLO_MODEL: "${YOLO_MODEL:-yolo11n.pt}"
+      YOLO_DEVICE: "${YOLO_DEVICE:-}"
+      YOLO_MIN_CONFIDENCE: "${YOLO_MIN_CONFIDENCE:-0.35}"
+      FAMILY_DB: "/data/family.sqlite3"
+      TWILIO_ACCOUNT_SID: "${TWILIO_ACCOUNT_SID:-}"
+      TWILIO_AUTH_TOKEN: "${TWILIO_AUTH_TOKEN:-}"
+      TWILIO_WHATSAPP_FROM: "${TWILIO_WHATSAPP_FROM:-+14155238886}"
+      MESSAGE_SENDS_PER_HOUR: "${MESSAGE_SENDS_PER_HOUR:-10}"
+      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
+      PAY_MAX_CENTS: "${PAY_MAX_CENTS:-5000}"
+      DEEPGRAM_API_KEY: "${DEEPGRAM_API_KEY:-}"
+      ELEVENLABS_API_KEY: "${ELEVENLABS_API_KEY:-}"
+      SPEECH_VOICE: "${SPEECH_VOICE:-}"
       SUPERMEMORY_API_KEY: "${SUPERMEMORY_API_KEY:-}"
       SUPERMEMORY_BASE_URL: "${SUPERMEMORY_BASE_URL:-https://api.supermemory.ai}"
-      GROQ_VISION_MODEL: "${GROQ_VISION_MODEL:-qwen/qwen3.8-27b}"
       CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:8081,http://127.0.0.1:8081,http://localhost:8082,http://127.0.0.1:8082}"
       VISIONMATE_MEMORY_DB: "/data/visionmate_memory.sqlite3"
       CAMPUS_MEMORY_DB: "/data/campus_memory.sqlite3"
@@ -26,45 +36,7 @@ services:
       CAMPUS_ALERT_TTL_HOURS: "${CAMPUS_ALERT_TTL_HOURS:-12}"
       OBSERVATION_MIN_CONFIDENCE: "${OBSERVATION_MIN_CONFIDENCE:-0.65}"
       OBSERVATION_VERIFIED_SHARED_MIN_CONFIDENCE: "${OBSERVATION_VERIFIED_SHARED_MIN_CONFIDENCE:-0.40}"
-      # Opt in to official Ultralytics YOLO scene detections. The checkpoint is
-      # downloaded by the container on first use; see README for AGPL licensing.
-      ULTRALYTICS_YOLO_ENABLED: "${ULTRALYTICS_YOLO_ENABLED:-false}"
-      ULTRALYTICS_YOLO_MODEL: "${ULTRALYTICS_YOLO_MODEL:-yolo11n.pt}"
-      # auto = CUDA, then MPS, then CPU. A GPU needs docker-compose.gpu.yml too.
-      # Empty means auto; the older ULTRALYTICS_/DEPTH_ANYTHING_ names still work.
-      YOLO_DEVICE: "${YOLO_DEVICE:-}"
-      SEG_DEVICE: "${SEG_DEVICE:-}"
-      DEPTH_DEVICE: "${DEPTH_DEVICE:-}"
-      SIGN_DEVICE: "${SIGN_DEVICE:-}"
-      ULTRALYTICS_YOLO_DEVICE: "${ULTRALYTICS_YOLO_DEVICE:-}"
-      DEPTH_ANYTHING_DEVICE: "${DEPTH_ANYTHING_DEVICE:-}"
-      YOLO_HALF: "${YOLO_HALF:-false}"
-      SEG_HALF: "${SEG_HALF:-false}"
-      DEPTH_HALF: "${DEPTH_HALF:-false}"
-      # Optional masks beside BoT-SORT. Off by default; a failure returns boxes only.
-      ULTRALYTICS_YOLO_SEG_ENABLED: "${ULTRALYTICS_YOLO_SEG_ENABLED:-false}"
-      ULTRALYTICS_YOLO_SEG_MODEL: "${ULTRALYTICS_YOLO_SEG_MODEL:-yolo11n-seg.pt}"
-      POINT_CLOUD_ENABLED: "${POINT_CLOUD_ENABLED:-false}"
-      POINT_CLOUD_INTERVAL_S: "${POINT_CLOUD_INTERVAL_S:-0.5}"
-      OBSTACLE_POINTS_ENABLED: "${OBSTACLE_POINTS_ENABLED:-true}"
-      OBSTACLE_MAX_RANGE_M: "${OBSTACLE_MAX_RANGE_M:-4.5}"
-      OBSTACLE_MAX_POINTS: "${OBSTACLE_MAX_POINTS:-192}"
-      ORB_SLAM3_ENABLED: "${ORB_SLAM3_ENABLED:-false}"
-      ORB_SLAM3_ENDPOINT: "${ORB_SLAM3_ENDPOINT:-http://127.0.0.1:8099/pose}"
-      RERUN_ENABLED: "${RERUN_ENABLED:-false}"
-      RERUN_SPAWN: "${RERUN_SPAWN:-false}"
-      # BoT-SORT with sparse optical-flow CMC keeps IDs more stable when the
-      # glasses camera moves. This is not metric camera-pose estimation.
-      YOLO_TRACKER_CONFIG: "${YOLO_TRACKER_CONFIG:-/app/botsort.yaml}"
-      DEPTH_ANYTHING_ENABLED: "${DEPTH_ANYTHING_ENABLED:-false}"
-      DEPTH_ANYTHING_MODE: "${DEPTH_ANYTHING_MODE:-metric}"
-      DEPTH_ANYTHING_CHECKPOINT: "${DEPTH_ANYTHING_CHECKPOINT:-/models/depth_anything_v2_metric_hypersim_vits.pth}"
-      # Keep real-world collision warnings disabled until ground-truth and
-      # accessibility safety validation are complete.
-      MOBILITY_COLLISION_WARNINGS_ENABLED: "${MOBILITY_COLLISION_WARNINGS_ENABLED:-false}"
     volumes:
-      # Persist the downloaded checkpoint between container rebuilds without
-      # checking model weights into source control.
       - ultralytics-model-cache:/root/.cache/ultralytics
       - ./apps/api/models:/models:ro
       - ./apps/api/data:/data
