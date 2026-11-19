@@ -251,4 +251,113 @@ rebuilt += chunker.flush() ?? ""
 checks.expect(rebuilt.contains("Stairs"), "no words are lost while streaming")
 checks.expect(rebuilt.contains("meters."), "including the last fragment")
 
+// MARK: - Design tokens
+//
+// Contrast is a feature here, not decoration: the users most likely to be
+// defeated by a low-contrast label are exactly the people this app is for.
+// Glass surfaces are white at 9-16% opacity, so they are checked composited
+// over the canvas rather than as the literal token, which is a colour no
+// user ever sees.
+
+checks.section("Design tokens: contrast")
+
+func ratio(_ foreground: RGBA, on background: RGBA) -> Double {
+    contrastRatio(foreground, background)
+}
+
+let onCanvas = Palette.canvas
+let glassCard = Palette.glass.composited(over: onCanvas)
+
+checks.expect(
+    ratio(Palette.text, on: onCanvas) >= Contrast.bodyText,
+    "body text on the canvas meets WCAG AA (\(String(format: "%.1f", ratio(Palette.text, on: onCanvas))):1)"
+)
+checks.expect(
+    ratio(Palette.textMuted, on: onCanvas) >= Contrast.bodyText,
+    "muted text on the canvas meets AA (\(String(format: "%.1f", ratio(Palette.textMuted, on: onCanvas))):1)"
+)
+checks.expect(
+    ratio(Palette.textFaint, on: onCanvas) >= Contrast.bodyText,
+    "faint text on the canvas meets AA (\(String(format: "%.1f", ratio(Palette.textFaint, on: onCanvas))):1)"
+)
+checks.expect(
+    ratio(Palette.text, on: glassCard) >= Contrast.bodyText,
+    "body text on a glass card meets AA (\(String(format: "%.1f", ratio(Palette.text, on: glassCard))):1)"
+)
+checks.expect(
+    ratio(Palette.textMuted, on: glassCard) >= Contrast.bodyText,
+    "muted text on a glass card meets AA (\(String(format: "%.1f", ratio(Palette.textMuted, on: glassCard))):1)"
+)
+// The pair that actually failed before the token was raised: faint text is
+// used for captions and hints, which sit on glass cards far more often than
+// on the bare canvas.
+checks.expect(
+    ratio(Palette.textFaint, on: glassCard) >= Contrast.bodyText,
+    "faint text on a glass card meets AA (\(String(format: "%.1f", ratio(Palette.textFaint, on: glassCard))):1)"
+)
+checks.expect(
+    ratio(RGBA(hex: 0x8E9B8D), on: glassCard) < Contrast.bodyText,
+    "the original faint token is confirmed to have failed on glass, so this check can fail"
+)
+checks.expect(
+    ratio(Palette.onLight, on: Palette.pillLight) >= Contrast.bodyText,
+    "the primary pill's label meets AA (\(String(format: "%.1f", ratio(Palette.onLight, on: Palette.pillLight))):1)"
+)
+checks.expect(
+    ratio(Palette.onLight, on: Palette.lime) >= Contrast.bodyText,
+    "a lime button's label meets AA (\(String(format: "%.1f", ratio(Palette.onLight, on: Palette.lime))):1)"
+)
+checks.expect(
+    ratio(Palette.lime, on: onCanvas) >= Contrast.nonText,
+    "the lime accent is distinguishable against the canvas"
+)
+checks.expect(
+    ratio(Palette.danger, on: onCanvas) >= Contrast.largeText,
+    "an error colour is legible against the canvas"
+)
+checks.expect(
+    ratio(Palette.text, on: Palette.canvasTop) >= Contrast.bodyText,
+    "text still passes at the lightest end of the background gradient (\(String(format: "%.1f", ratio(Palette.text, on: Palette.canvasTop))):1)"
+)
+
+checks.section("Design tokens: structure")
+
+checks.expect(minimumHitSize >= 44, "the minimum target clears Apple's 44pt floor")
+checks.expectEqual(minimumHitSize, 64, "and is set well above it")
+
+var descending = true
+for index in 1..<Typography.scale.count where Typography.scale[index].size >= Typography.scale[index - 1].size {
+    descending = false
+}
+checks.expect(descending, "the type scale runs largest to smallest without ties")
+
+var leadingOK = true
+for style in Typography.scale where style.lineHeight <= style.size {
+    leadingOK = false
+}
+checks.expect(leadingOK, "every style has line height greater than its point size")
+
+checks.expect(
+    Contrast.isLarge(Typography.display) && Contrast.isLarge(Typography.title),
+    "display and title qualify for WCAG's large-text allowance"
+)
+checks.expect(
+    !Contrast.isLarge(Typography.body) && !Contrast.isLarge(Typography.caption),
+    "body and caption are held to the stricter body-text ratio"
+)
+
+checks.section("Design tokens: colour maths")
+
+checks.expectClose(
+    contrastRatio(RGBA(hex: 0x000000), RGBA(hex: 0xFFFFFF)), 21.0, 0.01,
+    "black on white is the maximum ratio"
+)
+checks.expectClose(
+    contrastRatio(RGBA(hex: 0x808080), RGBA(hex: 0x808080)), 1.0, 0.001,
+    "a colour against itself has no contrast"
+)
+let halfWhite = RGBA(red: 1, green: 1, blue: 1, alpha: 0.5).composited(over: RGBA(hex: 0x000000))
+checks.expectClose(halfWhite.red, 0.5, 0.001, "compositing white at 50% over black lands midway")
+checks.expectEqual(RGBA(hex: 0xB7FF56).alpha, 1.0, "an opaque token stays opaque")
+
 checks.report()
