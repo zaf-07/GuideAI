@@ -541,11 +541,21 @@ export default function HandTracker({
 
         if (!active) return;
 
+        // A phone browser holds the whole pipeline in one tab: the MediaPipe
+        // wasm runtime, the holistic model, and every video frame. At 720p
+        // each frame buffer is about 3.7MB, and iOS Safari responds to the
+        // pressure by killing the tab and reloading the page mid-session.
+        // Landmarks are normalised to 0-1, so a smaller capture changes the
+        // feature contract not at all — only the precision of very small
+        // hands. Desktops, which have the headroom, keep 720p.
+        const smallScreen =
+          typeof window !== 'undefined' &&
+          (window.matchMedia?.('(pointer: coarse)').matches || window.innerWidth < 900);
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'user',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: smallScreen ? 640 : 1280 },
+            height: { ideal: smallScreen ? 480 : 720 },
             // Ask for a steady 30 fps. The word model reads 64-frame windows
             // (~2 s at 30 fps); a higher rate would shorten that window.
             frameRate: { ideal: 30 },

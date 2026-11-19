@@ -33,10 +33,30 @@ docs/            Device testing, sign-language model and dataset documentation
 npm install
 npm run dev          # Expo dev server
 npm run tunnel       # dev server over https, for testing on a phone
+npm run demo         # same, but production mode — use this on a phone browser
 npm run web          # browser fallback
 npm run typecheck
 npm run test:unit    # engine and memory-graph tests
 ```
+
+### Testing in a phone browser
+
+Use `npm run demo`, not `npm run tunnel`. A phone browser holds the whole
+pipeline in one tab — the MediaPipe wasm runtime (14MB), the holistic model
+(13MB), an ONNX detector (11MB) and every video frame — and iOS Safari
+responds to that pressure by killing the tab and reloading the page
+mid-session. The development bundle is 9.3MB unminified with React's
+development build on top; production mode serves 3.0MB of split chunks and
+drops the development overhead, which is usually the difference between a
+stable session and a reloading one.
+
+Sign mode and Bridge are the heaviest routes, because the holistic tracker
+and the word model load together. If a phone browser still reloads there, it
+has run out of headroom for a browser tab and the feature needs a development
+build rather than Safari.
+
+The tunnel is required for camera access: iOS Safari blocks `getUserMedia` on
+plain http, so a LAN address silently fails.
 
 Run these from the repository root. Starting Expo from the root *directly*
 (`npx expo start`) makes it treat the workspace root as the project and fail
