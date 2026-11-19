@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gateway:
+    name: Gateway
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r gateway/requirements-dev.txt
+      - name: Test
+        working-directory: gateway
+        run: pytest -q
+
+  core:
+    name: GuideLensCore
+    # macOS runners ship a full Xcode, so XCTest and the iOS SDK are
+    # available here even when the developer's own machine has neither.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        working-directory: ios/GuideLensCore
+        run: swift build
+      - name: Check the decision rules
+        working-directory: ios/GuideLensCore
+        run: swift run GuideLensChecks
+
+  app:
+    name: iOS app
+    runs-on: macos-15
+    # The SwiftUI client cannot be compiled without Xcode, so this job is
+    # the only place it is currently built at all. It is not a substitute
+    # for a device: the simulator has no LiDAR, no real camera and
+    # misleading audio timing, so no latency number from here is valid.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build for the simulator
+        working-directory: ios
+        run: |
+          xcodebuild build \
+            -project VisionMate.xcodeproj \
+            -target VisionMate \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcpretty || xcodebuild build \
+              -project VisionMate.xcodeproj \
+              -target VisionMate \
+              -sdk iphonesimulator \
+              -configuration Debug \
+              CODE_SIGNING_ALLOWED=NO

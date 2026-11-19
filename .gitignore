@@ -32,8 +32,14 @@ build/
 *.p12
 *.key
 *.mobileprovision
-android/
-ios/
+
+# `ios/` used to be Expo's generated native project and was ignored for that
+# reason. It is now the actual SwiftUI app, so only build output is ignored.
+ios/**/.build/
+ios/**/DerivedData/
+ios/**/*.xcuserdatad/
+ios/**/xcuserdata/
+.swiftpm/
 
 # How2Sign (CC BY-NC 4.0) clips, keypoints and model outputs stay local
 datasets/
@@ -41,7 +47,7 @@ datasets/
 # Model weights are downloaded at runtime, never committed
 *.pt
 *.pth
-apps/api/third_party/
+gateway/third_party/
 
 # Expo CLI writes a tsconfig at whatever it thinks the project root is. In this
 # workspace that lands here, but the only TypeScript project is apps/mobile.

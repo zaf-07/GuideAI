@@ -135,3 +135,46 @@ Parts of this repository originate from GuideLens
 (https://github.com/k1lst1x/GuideLens), MIT licensed; the original notice is
 kept at `LICENSE-GuideLens`, and `THIRD_PARTY_NOTICES.md` lists upstream
 models and datasets.
+
+---
+
+## Building without Xcode
+
+Xcode is not required to work on the decision rules. The Command Line Tools
+ship a full Swift 6 toolchain, so `ios/GuideLensCore` -- the obstacle filter,
+the announcement priority policy, the motion gate and the sentence chunker --
+builds and verifies locally:
+
+```bash
+cd ios/GuideLensCore
+swift build
+swift run GuideLensChecks     # 45 checks
+```
+
+Those rules deliberately import nothing from ARKit, PHASE, CoreHaptics or
+SwiftUI. Everything that cannot be exercised without a device is kept out of
+them, which is why they can be proven on a machine that cannot install Xcode,
+and why the iOS app is a thin layer wiring sensors to logic already tested.
+
+The checks are an executable rather than a test target because neither XCTest
+nor swift-testing ships with the Command Line Tools. Exit status is the
+contract.
+
+`xcodebuild` and the iOS SDK need a full Xcode, so the SwiftUI client in
+`ios/` is compiled in CI on a macOS runner instead -- see
+`.github/workflows/ci.yml`.
+
+**CI is not a device.** The simulator has no LiDAR, no real camera and
+misleading audio timing. It can prove the app compiles and that the rules
+hold; it cannot produce a single valid latency measurement, and every
+acceptance criterion in the spec is a device measurement.
+
+### If git or python stop working
+
+macOS routes `git`, `python3` and `swift` through a stub that refuses until
+the Xcode licence is accepted, even with only the Command Line Tools
+installed:
+
+```bash
+sudo xcodebuild -license accept
+```
