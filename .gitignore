@@ -47,6 +47,7 @@ ios/Podfile
 ios/Podfile.lock
 ios/Podfile.properties.json
 ios/.xcode.env
+ios/.gitignore
 .swiftpm/
 
 # How2Sign (CC BY-NC 4.0) clips, keypoints and model outputs stay local
