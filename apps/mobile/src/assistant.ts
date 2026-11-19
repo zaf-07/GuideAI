@@ -1,4 +1,4 @@
-import { getSightHeaders } from './sightIdentity';
+import { getSightDeviceId } from './sightIdentity';
 import { getApiUrl } from './vision';
 
 export type Contact = { name: string; phone: string };
@@ -33,7 +33,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!apiUrl) throw new Error('Set the GuideAI server address in Settings first.');
   let response: Response;
   try {
-    response = await fetch(`${apiUrl}${path}`, { ...init, headers: getSightHeaders() });
+    response = await fetch(`${apiUrl}${path}`, init);
   } catch {
     throw new Error('The GuideAI server could not be reached.');
   }
@@ -54,24 +54,24 @@ function form(fields: Record<string, string | number | undefined>) {
 }
 
 export function listContacts() {
-  return request<Contact[]>('/v1/contacts');
+  return request<Contact[]>('/contacts');
 }
 
 export function addContact(name: string, phone: string) {
-  return request<Contact>('/v1/contacts', { method: 'POST', body: form({ name, phone }) });
+  return request<Contact>('/contacts', { method: 'POST', body: form({ name, phone }) });
 }
 
 export function removeContact(name: string) {
-  return request<{ status: string }>(`/v1/contacts/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  return request<{ status: string }>(`/contacts/${encodeURIComponent(name)}`, { method: 'DELETE' });
 }
 
 export function askAssistant(text: string, location?: Coordinates | null) {
-  return request<AssistantReply>('/v1/assistant', {
+  return request<AssistantReply>('/assistant', {
     method: 'POST',
-    body: form({ text, lat: location?.lat, lon: location?.lon }),
+    body: form({ text, session: getSightDeviceId(), lat: location?.lat, lon: location?.lon }),
   });
 }
 
 export function reportLocation(location: Coordinates) {
-  return request<RouteUpdate>('/v1/location', { method: 'POST', body: form(location) });
+  return request<RouteUpdate>('/location', { method: 'POST', body: form({ ...location, session: getSightDeviceId() }) });
 }

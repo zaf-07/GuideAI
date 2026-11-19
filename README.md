@@ -40,25 +40,23 @@ code in this repository:
 ## Layout
 
 ```
-ios/        the SwiftUI client — the only client
+ios/        the SwiftUI client
 gateway/    FastAPI relay to a hosted vision model
 models/     bundled ONNX fingerspelling classifier and PopSign vocabulary
+apps/       the Expo and web app and its desktop shell
+backend/    the API the web app calls: vision, assistant, memory, family, bridge
 docs/       design and model documentation
 ```
 
-The React Native app, the Electron desktop build, the Uni-Sign research
-adapter, the Groq client and the Shared Sight hazard-reporting feature were
-removed from `main`. Nothing was destroyed: all of it is on the **`legacy`**
-branch, at the commit before the surgery.
+`apps/` holds the Expo and web app and the Electron shell, and `backend/` is
+the API they call. They sit alongside the native client; the `legacy` branch
+still marks the tree as it was before the native restructure.
 
-React Native was removed because it cannot reach `ARFrame.sceneDepth`,
-`PHASE`, `CoreHaptics` or on-device `SFSpeechRecognizer`. Those four APIs are
-the entire product.
-
-Shared Sight was removed because community hazard reporting needs a map, a
-list, a submission form and a moderation story — four screens that the
-single-surface rule has no room for. It is worth revisiting once the core app
-has real users.
+The native app exists because React Native cannot reach `ARFrame.sceneDepth`,
+`PHASE`, `CoreHaptics` or on-device `SFSpeechRecognizer`. The two safety rules
+above are enforced for `ios/` and `gateway/`. The web app is a companion and a
+demo surface: its hazard warnings come from `backend/` over the network, so it
+does not meet rule 1 and must not be relied on while walking.
 
 ---
 
@@ -115,6 +113,60 @@ pytest -q                # 76 tests
 The in-process rate limits and token budget assume **one worker**. A
 multi-worker or internet-facing deployment must enforce matching limits at a
 shared gateway, or each worker will allow the full budget by itself.
+
+---
+
+## The web app and its API
+
+`apps/mobile` is an Expo app that also runs in a browser; `backend/` is the
+FastAPI service it calls.
+
+```
+backend/
+  app/main.py          routes
+  app/services/        vision, assistant, memory, bridge, navigation,
+                       payments, checkout, messaging, speech, wearable
+  tests/               97 tests
+  .env.example         copy to backend/.env
+```
+
+| Feature | Route | How it works |
+|---|---|---|
+| See | `POST /vision/analyze` | A YOLO11 detector names what is in view and where: "Chair ahead, left." Position only, never distance. The description comes from Gemini, then MiniMax, then Groq, then a sentence built from the detections. |
+| Assistant | `POST /assistant` | One sentence in, one spoken reply out: describe, read text, recall, "where am I", walking directions, messages, calls, timers and payments. |
+| Remember | `/memory`, `POST /memory/observe` | Text notes with a time and a street; never images or audio. |
+| Family | `/contacts`, `/places` | "Tell Mom where I am" prepares a WhatsApp message and waits for a yes. |
+| Walking directions | `POST /location` | OpenStreetMap search and foot routing, spoken turn by turn. |
+| Bridge | `POST /bridge/sign` | A few frames are matched against a small fixed vocabulary. This is not full sign-language translation. |
+| Voice | `POST /speech`, `POST /speech/transcribe` | Optional natural voice and transcription. |
+
+Nothing leaves on the user's behalf — a message, a call, a payment — without
+an explicit yes. Payments are simulated unless a Stripe test key is set, and a
+live key is refused.
+
+The backend is a single-user local service: it has no sign-in, and contacts
+and memory are shared by everyone who can reach it. Keep it on your own
+machine or behind your own tunnel.
+
+The web app's Shared Sight, memory sync and two-device bridge relay screens
+have no routes in this backend and will report the server as unavailable.
+
+```bash
+npm install
+cp backend/.env.example backend/.env   # add GEMINI_API_KEY
+
+# terminal 1, from the repo root
+pip install -r backend/requirements.txt -r backend/requirements-vision.txt
+python -m unittest discover -s backend/tests
+uvicorn backend.app.main:app --port 8000
+
+# terminal 2, from the repo root
+npm run web                            # or: npm run demo, for a phone browser
+```
+
+`docker compose up --build` starts both services: the gateway on port 8000 and
+the backend on 8082. Run the backend with uvicorn as above when using the web
+app locally, because the app expects it on port 8000.
 
 ---
 

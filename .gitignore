@@ -3,9 +3,8 @@ node_modules/
 dist/
 apps/mobile/public/
 apps/mobile/ios/
-apps/api/data/
-apps/api/*.sqlite3*
-apps/api/campus_memory.db
+apps/mobile/android/
+backend/data/
 apps/desktop/web/
 apps/desktop/release/
 web-build/

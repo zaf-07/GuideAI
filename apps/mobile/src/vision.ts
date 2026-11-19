@@ -199,7 +199,6 @@ const API_URL = configuredApiUrl || (
     : ''
 );
 export const hasVisionBackend = Boolean(API_URL);
-const sessionId = `gl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 
 function requireApiUrl() {
   const url = getApiUrl();
@@ -218,84 +217,172 @@ function dataUriToBlob(uri: string): Blob {
   return new Blob([array], { type: mime });
 }
 
-async function analyzeFrame(uri: string, mode: AssistMode, previousSceneKey: string, signal: AbortSignal) {
+type SceneDetection = {
+  label: string;
+  confidence: number;
+  box: [number, number, number, number];
+  position: string;
+  area: number;
+};
+
+type SceneAnalysis = {
+  warnings: string[];
+  detections: SceneDetection[];
+  detector: string;
+  description: string | null;
+  provider: string | null;
+  latency_ms: { detect: number; total: number };
+};
+
+type SignReading = { text: string; confidence: number; provider: string | null };
+
+async function frameBlob(uri: string): Promise<Blob> {
+  if (uri.startsWith('data:')) return dataUriToBlob(uri);
+  const imageResponse = await fetch(uri);
+  if (!imageResponse.ok) throw new Error('Camera frame could not be prepared for analysis');
+  return await imageResponse.blob();
+}
+
+async function appendFrame(data: FormData, field: string, uri: string, name: string) {
+  if (typeof window !== 'undefined') {
+    data.append(field, await frameBlob(uri), name);
+  } else {
+    data.append(field, { uri, name, type: 'image/jpeg' } as unknown as Blob);
+  }
+}
+
+function requestError(message: string, response: Response) {
+  const error = new Error(`${message}: ${response.status}`) as Error & { retryAfter?: number };
+  error.retryAfter = Number(response.headers.get('retry-after') || 0);
+  return error;
+}
+
+function sceneObjects(detections: SceneDetection[], limit: number): VisionObject[] {
+  return [...detections]
+    .sort((left, right) => right.area - left.area)
+    .slice(0, limit)
+    .map((item) => ({
+      label: item.label,
+      confidence: item.confidence,
+      position: item.position,
+      x: item.box[0],
+      y: item.box[1],
+      width: item.box[2] - item.box[0],
+      height: item.box[3] - item.box[1],
+    }));
+}
+
+function sceneKeyFor(analysis: SceneAnalysis) {
+  const seen = [...new Set(analysis.detections.map((item) => `${item.label}@${item.position}`))].sort();
+  if (seen.length || analysis.detector === 'ready') return (seen.join('|') || 'empty').replace(/,? /g, '-').slice(0, 80);
+  const words = [...new Set((analysis.description || '').toLowerCase().match(/[a-z]{4,}/g) || [])].sort();
+  return `text:${words.slice(0, 8).join('-')}`.slice(0, 80);
+}
+
+async function analyzeScene(uri: string, describe: boolean, signal: AbortSignal): Promise<SceneAnalysis> {
   const apiUrl = requireApiUrl();
   const data = new FormData();
-  // Browsers require a real Blob in multipart form data; the React Native
-  // `{ uri, name, type }` object otherwise becomes a text field and FastAPI
-  // returns 422 before the vision model ever sees the image.
-  if (typeof window !== 'undefined') {
-    let image: Blob;
-    if (uri.startsWith('data:')) {
-      image = dataUriToBlob(uri);
-    } else {
-      const imageResponse = await fetch(uri);
-      if (!imageResponse.ok) throw new Error('Camera frame could not be prepared for analysis');
-      image = await imageResponse.blob();
-    }
-    data.append('image', image, 'frame.jpg');
-  } else {
-    data.append('image', { uri, name: 'frame.jpg', type: 'image/jpeg' } as unknown as Blob);
-  }
-  data.append('task', mode);
-  data.append('previous_scene_key', previousSceneKey);
+  await appendFrame(data, 'image', uri, 'frame.jpg');
+  data.append('describe', describe ? 'true' : 'false');
   let response: Response;
   try {
-    response = await fetch(`${apiUrl}/v1/describe`, {
-      method: 'POST', body: data, headers: { 'X-Session-ID': sessionId }, signal,
-    });
+    response = await fetch(`${apiUrl}/vision/analyze`, { method: 'POST', body: data, signal });
   } catch {
     throw new Error('Vision server unavailable');
   }
-  if (!response.ok) {
-    const retryAfter = Number(response.headers.get('retry-after') || 0);
-    const error = new Error(`Vision request failed: ${response.status}`) as Error & { retryAfter?: number };
-    error.retryAfter = retryAfter;
-    throw error;
-  }
-  return (await response.json()) as VisionResult;
+  if (!response.ok) throw requestError('Vision request failed', response);
+  return (await response.json()) as SceneAnalysis;
 }
 
-async function trackFrame(uri: string, signal: AbortSignal): Promise<TrackingResult> {
+async function readSign(frames: string[], signal?: AbortSignal): Promise<SignReading> {
   const apiUrl = requireApiUrl();
   const data = new FormData();
-  if (typeof window !== 'undefined') {
-    let image: Blob;
-    if (uri.startsWith('data:')) {
-      image = dataUriToBlob(uri);
-    } else {
-      const imageResponse = await fetch(uri);
-      if (!imageResponse.ok) throw new Error('Camera frame could not be prepared for tracking');
-      image = await imageResponse.blob();
-    }
-    data.append('image', image, 'frame.jpg');
-  } else {
-    data.append('image', { uri, name: 'frame.jpg', type: 'image/jpeg' } as unknown as Blob);
+  for (let index = 0; index < frames.length; index++) {
+    await appendFrame(data, 'images', frames[index], `frame-${index}.jpg`);
   }
-  const response = await fetch(`${apiUrl}/v1/track`, {
-    method: 'POST', body: data, headers: { 'X-Session-ID': sessionId }, signal,
-  });
-  if (!response.ok) throw new Error(`Tracking request failed: ${response.status}`);
-  return await response.json() as TrackingResult;
-}
-
-export async function interpretSignSequence(frames: string[], previousTranscript = '', signal?: AbortSignal) {
-  const apiUrl = requireApiUrl();
-  if (frames.length !== 3) throw new Error('Three sign-language context frames are required');
   let response: Response;
   try {
-    response = await fetch(`${apiUrl}/v1/interpret-sign`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Session-ID': sessionId },
-      body: JSON.stringify({ frames, previous_transcript: previousTranscript.slice(-600) }), signal,
-    });
+    response = await fetch(`${apiUrl}/bridge/sign`, { method: 'POST', body: data, signal });
   } catch {
     throw new Error('Sign interpretation server offline');
   }
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { detail?: string } | null;
-    throw new Error(body?.detail || `Sign interpretation failed: ${response.status}`);
+    throw new Error(typeof body?.detail === 'string' ? body.detail : `Sign interpretation failed: ${response.status}`);
   }
-  return (await response.json()) as SignTranslation;
+  return (await response.json()) as SignReading;
+}
+
+function signSentence(phrase: string) {
+  const text = phrase.trim();
+  return text ? `${text[0].toUpperCase()}${text.slice(1)}.` : '';
+}
+
+export function extendSignTranscript(previous: string, phrase: string) {
+  const transcript = previous.trim();
+  const segment = signSentence(phrase);
+  if (!segment) return { transcript, segment: '' };
+  const tail = transcript.replace(/[.!?, ]+$/, '').toLowerCase();
+  if (tail.endsWith(segment.slice(0, -1).toLowerCase())) return { transcript, segment: '' };
+  return { transcript: `${transcript} ${segment}`.trim().slice(-600), segment };
+}
+
+async function analyzeFrame(uri: string, mode: AssistMode, previousSceneKey: string, signal: AbortSignal): Promise<VisionResult> {
+  if (mode === 'sign') {
+    const reading = await readSign([uri], signal);
+    const spoken = signSentence(reading.text);
+    const key = reading.text.toLowerCase() || 'none';
+    return {
+      summary: spoken || 'No sign recognised',
+      speech: spoken,
+      scene_key: key,
+      urgency: 'low',
+      changed: key !== previousSceneKey,
+      objects: [],
+      task: 'sign',
+      should_speak: Boolean(spoken) && key !== previousSceneKey,
+    };
+  }
+  const analysis = await analyzeScene(uri, true, signal);
+  const speech = (analysis.description || '').trim();
+  const key = sceneKeyFor(analysis);
+  return {
+    summary: speech.split(/(?<=[.!?])\s+/)[0].slice(0, 100),
+    speech: speech.slice(0, 240),
+    scene_key: key,
+    urgency: analysis.warnings.length ? 'medium' : 'low',
+    changed: key !== previousSceneKey,
+    objects: sceneObjects(analysis.detections, 8),
+    task: 'scene',
+    should_speak: analysis.warnings.length > 0 && key !== previousSceneKey,
+    warnings: analysis.warnings,
+  };
+}
+
+async function trackFrame(uri: string, signal: AbortSignal): Promise<TrackingResult> {
+  const analysis = await analyzeScene(uri, false, signal);
+  return {
+    objects: sceneObjects(analysis.detections, 12),
+    warnings: analysis.warnings,
+    tracking_latency_ms: analysis.latency_ms.detect,
+    detector: analysis.detector === 'ready' ? 'yolo11' : 'disabled',
+    metric_depth: false,
+    camera_coach: null,
+    collision_warnings_enabled: false,
+  };
+}
+
+export async function interpretSignSequence(frames: string[], previousTranscript = '', signal?: AbortSignal): Promise<SignTranslation> {
+  if (frames.length !== 3) throw new Error('Three sign-language context frames are required');
+  const reading = await readSign(frames, signal);
+  const next = extendSignTranscript(previousTranscript, reading.text);
+  return {
+    transcript: next.transcript,
+    segment: next.segment,
+    confidence: reading.confidence,
+    is_final: Boolean(next.segment),
+    should_speak: Boolean(next.segment),
+  };
 }
 
 async function imageUriToDataUrl(uri: string) {
