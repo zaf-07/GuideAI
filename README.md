@@ -43,18 +43,19 @@ code in this repository:
 ios/        the SwiftUI client
 gateway/    FastAPI relay to a hosted vision model
 models/     bundled ONNX fingerspelling classifier and PopSign vocabulary
-apps/       the Expo and web app, its desktop shell, and the API behind it
+apps/       the Expo and web app and its desktop shell
+backend/    the API the web app calls: vision, assistant, memory, family, bridge
 docs/       design and model documentation
 ```
 
-`apps/` holds the Expo and web app, the Electron shell, Shared Sight and the
-API they call. They sit alongside the native client; the `legacy` branch still
-marks the tree as it was before the native restructure.
+`apps/` holds the Expo and web app and the Electron shell, and `backend/` is
+the API they call. They sit alongside the native client; the `legacy` branch
+still marks the tree as it was before the native restructure.
 
 The native app exists because React Native cannot reach `ARFrame.sceneDepth`,
 `PHASE`, `CoreHaptics` or on-device `SFSpeechRecognizer`. The two safety rules
 above are enforced for `ios/` and `gateway/`. The web app is a companion and a
-demo surface: its hazard warnings come from `apps/api` over the network, so it
+demo surface: its hazard warnings come from `backend/` over the network, so it
 does not meet rule 1 and must not be relied on while walking.
 
 ---
@@ -117,40 +118,55 @@ shared gateway, or each worker will allow the full budget by itself.
 
 ## The web app and its API
 
-`apps/mobile` is an Expo app that also runs in a browser; `apps/api` is the
+`apps/mobile` is an Expo app that also runs in a browser; `backend/` is the
 FastAPI service it calls.
+
+```
+backend/
+  app/main.py          routes
+  app/services/        vision, assistant, memory, bridge, navigation,
+                       payments, checkout, messaging, speech, wearable
+  tests/               97 tests
+  .env.example         copy to backend/.env
+```
 
 | Feature | Route | How it works |
 |---|---|---|
-| Hazard warnings | `POST /v1/track`, `POST /v1/vision/analyze` | A YOLO11 detector names what is in view and where: "Chair ahead, left." Position only, never distance. |
-| Scene description | `POST /v1/describe` | The frame and the detections go to Gemini, then MiniMax, then Groq. If every provider fails, the answer is a sentence built from the detections. |
-| Sign reading | `POST /v1/interpret-sign` | A few frames are matched against a small fixed vocabulary. Low-confidence readings are dropped. This is not full sign-language translation. |
-| Assistant | `POST /v1/assistant` | One sentence in, one spoken reply out: describe, read text, "where am I", walking directions, messages, calls, timers and payments. |
-| Family | `/v1/contacts`, `/v1/places` | Contacts and saved places, kept per device. "Tell Mom where I am" prepares a WhatsApp message and waits for a yes. |
-| Walking directions | `POST /v1/location` | OpenStreetMap search and foot routing, spoken turn by turn. |
-| Memory and Shared Sight | `/v1/recall/*`, `/v1/observations`, `/v1/alerts` | The on-device memory graph, its optional sync, and community hazard reports. |
+| See | `POST /vision/analyze` | A YOLO11 detector names what is in view and where: "Chair ahead, left." Position only, never distance. The description comes from Gemini, then MiniMax, then Groq, then a sentence built from the detections. |
+| Assistant | `POST /assistant` | One sentence in, one spoken reply out: describe, read text, recall, "where am I", walking directions, messages, calls, timers and payments. |
+| Remember | `/memory`, `POST /memory/observe` | Text notes with a time and a street; never images or audio. |
+| Family | `/contacts`, `/places` | "Tell Mom where I am" prepares a WhatsApp message and waits for a yes. |
+| Walking directions | `POST /location` | OpenStreetMap search and foot routing, spoken turn by turn. |
+| Bridge | `POST /bridge/sign` | A few frames are matched against a small fixed vocabulary. This is not full sign-language translation. |
+| Voice | `POST /speech`, `POST /speech/transcribe` | Optional natural voice and transcription. |
 
 Nothing leaves on the user's behalf — a message, a call, a payment — without
 an explicit yes. Payments are simulated unless a Stripe test key is set, and a
-live key is refused. Contacts, saved places and pending requests belong to the
-device that created them.
+live key is refused.
+
+The backend is a single-user local service: it has no sign-in, and contacts
+and memory are shared by everyone who can reach it. Keep it on your own
+machine or behind your own tunnel.
+
+The web app's Shared Sight, memory sync and two-device bridge relay screens
+have no routes in this backend and will report the server as unavailable.
 
 ```bash
 npm install
+cp backend/.env.example backend/.env   # add GEMINI_API_KEY
 
-# terminal 1
-cd apps/api
-pip install -r requirements-dev.txt
-python -m pytest                       # 162 tests
-GEMINI_API_KEY=your_key uvicorn main:app --port 8000
+# terminal 1, from the repo root
+pip install -r backend/requirements.txt -r backend/requirements-vision.txt
+python -m unittest discover -s backend/tests
+uvicorn backend.app.main:app --port 8000
 
 # terminal 2, from the repo root
 npm run web                            # or: npm run demo, for a phone browser
 ```
 
 `docker compose up --build` starts both services: the gateway on port 8000 and
-`apps/api` on 8082. Run the API with uvicorn as above when using the web app
-locally, because the app expects it on port 8000.
+the backend on 8082. Run the backend with uvicorn as above when using the web
+app locally, because the app expects it on port 8000.
 
 ---
 

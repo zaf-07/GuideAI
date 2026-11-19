@@ -4,9 +4,7 @@ dist/
 apps/mobile/public/
 apps/mobile/ios/
 apps/mobile/android/
-apps/api/data/
-apps/api/*.sqlite3*
-apps/api/campus_memory.db
+backend/data/
 apps/desktop/web/
 apps/desktop/release/
 web-build/
@@ -58,7 +56,6 @@ datasets/
 *.pt
 *.pth
 gateway/third_party/
-apps/api/third_party/
 
 # Expo CLI writes a tsconfig at whatever it thinks the project root is. In this
 # workspace that lands here, but the only TypeScript project is apps/mobile.

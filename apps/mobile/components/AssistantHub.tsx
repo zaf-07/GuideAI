@@ -127,17 +127,18 @@ export default function AssistantHub() {
         return;
       }
       try {
-        const health = await fetch(`${base}/health`).then((response) => response.json());
+        const status = await fetch(`${base}/system/status`).then((response) => response.json());
         const dashboard = await getSightDashboard(campusLocation).catch(() => null);
+        const providers: string[] = status.vision?.cloud_providers || [];
         const rows: Array<[string, string]> = [
           ['Server', `Online · ${base}`],
-          ['Scene descriptions', health.configured
-            ? `${(health.vision_providers || []).join(', ')} · ${health.model}`
+          ['Scene descriptions', providers.length
+            ? `${providers.join(', ')} · ${status.vision?.model}`
             : 'On-device detector only'],
-          ['Hazard detector', health.detector?.state === 'ready'
-            ? `Ready · ${health.detector.model}`
-            : health.detector?.enabled ? 'Starts with the first frame' : 'Off'],
-          ['Family messages', health.messages?.whatsapp === 'direct' ? 'Sent directly' : 'Opens WhatsApp'],
+          ['Hazard detector', status.vision?.detector?.state === 'ready'
+            ? `Ready · ${status.vision.detector.model}`
+            : status.vision?.detector?.state === 'unavailable' ? 'Off' : 'Starts with the first frame'],
+          ['Family messages', status.messages?.whatsapp === 'opens_whatsapp' ? 'Opens WhatsApp' : 'Sent directly'],
           ['Tracking latency', dashboard?.tracking_latency_ms != null ? `${dashboard.tracking_latency_ms} ms average (5 min)` : 'No recent scans'],
           ['Active phones', dashboard ? String(dashboard.connected_devices) : '—'],
         ];
@@ -220,7 +221,7 @@ export default function AssistantHub() {
     setPingLatency(null);
     const start = performance.now();
     try {
-      const response = await fetch(`${apiUrl.replace(/\/$/, '')}/healthz`, {
+      const response = await fetch(`${apiUrl.replace(/\/$/, '')}/health`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
