@@ -13,11 +13,6 @@ import type { DetectionResult, LocalDetection } from './detector.types';
  */
 type OrtModule = typeof import('onnxruntime-react-native');
 let ort: OrtModule | null = null;
-try {
-  ort = require('onnxruntime-react-native') as OrtModule;
-} catch {
-  ort = null;
-}
 
 /** True when on-device detection can run at all. */
 export function hasLocalDetector(): boolean {

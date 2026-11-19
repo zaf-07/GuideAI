@@ -63,19 +63,8 @@ public enum Theme {
     }
 }
 
-public extension Font {
-    /// Builds a font from a token.
-    ///
-    /// `relativeTo` keeps Dynamic Type working: these sizes are a starting
-    /// point, not a ceiling. A low-vision user who has set the largest
-    /// accessibility text size must get it, so nothing here is a fixed size.
-    static func token(_ style: TextStyle, relativeTo textStyle: Font.TextStyle) -> Font {
-        .system(size: style.size, weight: .init(style.weight), design: .default)
-    }
-}
-
 private extension Font.Weight {
-    init(_ numeric: Int) {
+    init(numeric: Int) {
         switch numeric {
         case ..<400: self = .light
         case 400..<500: self = .regular
@@ -86,16 +75,42 @@ private extension Font.Weight {
     }
 }
 
-public extension View {
-    /// Applies a token's size, leading and tracking, scaled by Dynamic Type.
-    func textToken(_ style: TextStyle, relativeTo textStyle: Font.TextStyle = .body) -> some View {
-        self
-            .font(.token(style, relativeTo: textStyle))
-            .tracking(style.tracking)
-            .lineSpacing(max(0, style.lineHeight - style.size))
+/// Applies a type token at a size that follows the system text size.
+///
+/// `Font.system(size:)` is a *fixed* size: it ignores Dynamic Type entirely.
+/// Using it here would mean a low-vision user who has set the largest
+/// accessibility text size still gets 13pt captions, which would quietly
+/// defeat the main reason this app exists. `ScaledMetric` scales the token
+/// against the matching system text style instead, so these sizes are a
+/// starting point rather than a ceiling.
+private struct TextTokenModifier: ViewModifier {
+    let token: TextStyle
+    @ScaledMetric private var size: CGFloat
+
+    init(token: TextStyle, relativeTo textStyle: Font.TextStyle) {
+        self.token = token
+        _size = ScaledMetric(wrappedValue: token.size, relativeTo: textStyle)
     }
 
-    /// A glass card: translucent fill, hairline border, generous radius.
+    func body(content: Content) -> some View {
+        content
+            .font(.system(size: size, weight: Font.Weight(numeric: token.weight)))
+            .tracking(token.tracking)
+            // Leading is expressed as line height in the tokens; SwiftUI wants
+            // the gap between lines, and it must scale with the text.
+            .lineSpacing(max(0, (token.lineHeight - token.size) * (size / token.size)))
+    }
+}
+
+public extension View {
+    /// Applies a token, scaled by Dynamic Type.
+    func textToken(_ token: TextStyle, relativeTo textStyle: Font.TextStyle = .body) -> some View {
+        modifier(TextTokenModifier(token: token, relativeTo: textStyle))
+    }
+}
+
+public extension View {
+/// A glass card: translucent fill, hairline border, generous radius.
     func glassCard() -> some View {
         self
             .padding(Spacing.lg)

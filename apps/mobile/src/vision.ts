@@ -186,7 +186,7 @@ export function getApiUrl(): string {
   }
   const configured = process.env.EXPO_PUBLIC_API_URL ? normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL) : '';
   if (configured) return configured;
-  if (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+  if (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location?.hostname || '')) {
     return 'http://localhost:8000';
   }
   return '';
@@ -194,7 +194,7 @@ export function getApiUrl(): string {
 
 const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL ? normalizeApiUrl(process.env.EXPO_PUBLIC_API_URL) : '';
 const API_URL = configuredApiUrl || (
-  typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location?.hostname || '')
     ? 'http://localhost:8000'
     : ''
 );
