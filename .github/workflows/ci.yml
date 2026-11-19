@@ -37,24 +37,32 @@ jobs:
   app:
     name: iOS app
     runs-on: macos-15
-    # The SwiftUI client cannot be compiled without Xcode, so this job is
-    # the only place it is currently built at all. It is not a substitute
-    # for a device: the simulator has no LiDAR, no real camera and
-    # misleading audio timing, so no latency number from here is valid.
+    # The SwiftUI client needs Xcode, so this job is the only place it is
+    # built in CI. It is not a substitute for a device: the simulator has no
+    # LiDAR, no real camera and misleading audio timing, so no latency number
+    # from here is valid for any acceptance criterion.
     steps:
       - uses: actions/checkout@v4
       - name: Build for the simulator
         working-directory: ios
+        # `-scheme`, not `-target`: Swift package dependencies are resolved
+        # through the scheme, and `-target` fails to find the GuideLensCore
+        # module even though the package itself compiles.
         run: |
           xcodebuild build \
             -project VisionMate.xcodeproj \
-            -target VisionMate \
+            -scheme VisionMate \
             -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
             -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO \
-            | xcpretty || xcodebuild build \
-              -project VisionMate.xcodeproj \
-              -target VisionMate \
-              -sdk iphonesimulator \
-              -configuration Debug \
-              CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO
+      - name: Build for a device
+        working-directory: ios
+        run: |
+          xcodebuild build \
+            -project VisionMate.xcodeproj \
+            -scheme VisionMate \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO

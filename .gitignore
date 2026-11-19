@@ -39,6 +39,8 @@ ios/**/.build/
 ios/**/DerivedData/
 ios/**/*.xcuserdatad/
 ios/**/xcuserdata/
+# SwiftPM writes a 16MB index store here when a build flag is misparsed.
+ios/**/-Xcc/
 ios/GuideAI/
 ios/GuideAI.xcodeproj/
 ios/GuideAI.xcworkspace/
