@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
+import { router } from 'expo-router';
 import { Button, ChoiceCard, Chip, Display, GlassCard, Progress, Screen, Text } from '../../components';
 import { TOTAL_STEPS, useDraft } from './draft';
 import { VisionLevel } from '../../state/profile';
@@ -13,9 +14,8 @@ const LEVELS: { id: VisionLevel; title: string; subtitle: string }[] = [
 ];
 
 /** Step 2 for the vision track: how much sight, and how much talking. */
-export function VisionSetupScreen({ navigation }: any) {
+export function VisionSetupScreen() {
   const { draft, set } = useDraft();
-  const deafblind = draft.impairments.includes('deafblind');
 
   return (
     <Screen
@@ -23,7 +23,7 @@ export function VisionSetupScreen({ navigation }: any) {
         <Button
           label="Continue"
           disabled={!draft.visionLevel}
-          onPress={() => navigation.navigate(deafblind ? 'HearingSetup' : 'Permissions')}
+          onPress={() => router.push('/onboarding/permissions')}
         />
       }
     >
@@ -62,8 +62,8 @@ export function VisionSetupScreen({ navigation }: any) {
         </View>
         <Text variant="caption" faint>
           {draft.guidance === 'concise'
-            ? '"Door, two metres, left."'
-            : '"A glass door about two metres ahead on your left, pull handle on the right side."'}
+            ? '"Door ahead, slightly left."'
+            : '"A glass door is ahead on your left; the handle appears to be on the right side."'}
         </Text>
       </GlassCard>
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Alert, StyleSheet, Switch, View } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Chip, Display, GlassCard, RoundButton, Screen, Text } from '../components';
 import { useProfile } from '../state/ProfileContext';
@@ -35,8 +36,8 @@ function Row({
   );
 }
 
-export function SettingsScreen({ navigation }: any) {
-  const { profile, patch, restartOnboarding, signOut } = useProfile();
+export function SettingsScreen() {
+  const { profile, patch, restartOnboarding } = useProfile();
   const vision = hasVisionTrack(profile);
   const hearing = hasHearingTrack(profile);
 
@@ -46,14 +47,14 @@ export function SettingsScreen({ navigation }: any) {
       'You will go back through setup. The app rebuilds around your new answers, and nothing you have saved is deleted.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Change', onPress: () => restartOnboarding() },
+        { text: 'Change', onPress: async () => { await restartOnboarding(); router.replace('/onboarding'); } },
       ],
     );
 
   return (
     <Screen>
       <View style={styles.bar}>
-        <RoundButton icon="chevron-back" label="Back" onPress={() => navigation.goBack()} />
+        <RoundButton icon="chevron-back" label="Back" onPress={() => router.back()} />
       </View>
 
       <Display lead="Settings" accent="and profile" />
@@ -103,6 +104,17 @@ export function SettingsScreen({ navigation }: any) {
               <Chip key={l} label={l === 'other' ? 'Other' : l} active={profile.signLanguage === l} onPress={() => patch({ signLanguage: l })} />
             ))}
           </View>
+          <Text variant="section" style={{ marginTop: spacing.md }}>Show replies as</Text>
+          <View style={styles.chips}>
+            {(['text', 'avatar', 'both'] as const).map((format) => (
+              <Chip
+                key={format}
+                label={format === 'both' ? 'Text + avatar' : format === 'avatar' ? 'Sign avatar' : 'Text'}
+                active={profile.replyFormat === format}
+                onPress={() => patch({ replyFormat: format })}
+              />
+            ))}
+          </View>
         </GlassCard>
       ) : null}
 
@@ -133,17 +145,6 @@ export function SettingsScreen({ navigation }: any) {
         />
       </GlassCard>
 
-      <Button
-        label="Sign out"
-        tone="ghost"
-        onPress={() =>
-          Alert.alert('Sign out?', 'Your profile and memory on this device are cleared.', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Sign out', style: 'destructive', onPress: () => signOut() },
-          ])
-        }
-        style={{ marginTop: spacing.md }}
-      />
     </Screen>
   );
 }

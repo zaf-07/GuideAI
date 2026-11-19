@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Display, GlassCard, RoundButton, Screen, Text } from '../components';
 import { useProfile } from '../state/ProfileContext';
@@ -14,12 +15,12 @@ import { colors, radius, spacing } from '../theme/tokens';
 const COPY: Record<string, { accent: string; what: string; needs: string[] }> = {
   scene: {
     accent: 'live scene',
-    what: 'The rear camera streams into an on-device detection model. Every object gets a label, a bearing and a distance, and the important ones are spoken in priority order.',
-    needs: ['Camera frames at 30fps', 'Depth from LiDAR or stereo estimate', 'Object detection + depth fusion', 'Speech queue with interruption'],
+    what: 'The rear camera feeds on-device detection. Important objects are announced by direction; supported devices may add measured depth.',
+    needs: ['AVFoundation camera frames', 'Apple Vision + Core ML', 'Optional measured depth', 'Interruptible speech queue'],
   },
   navigate: {
     accent: 'navigation',
-    what: 'Route guidance built for walking, not driving: kerbs, crossings, pavement edges, traffic direction and the moment it is safe to step out.',
+    what: 'Walking directions combine route, heading and observable crossing cues. GuideAI never guarantees that a road is safe to cross.',
     needs: ['Location + heading', 'Pedestrian routing', 'Crossing and signal detection', 'Haptic proximity channel'],
   },
   read: { accent: 'reading', what: 'Text in the camera view is read aloud in reading order, with layout preserved for menus, forms and signs.', needs: ['On-device OCR', 'Layout analysis', 'Language detection'] },
@@ -37,24 +38,26 @@ const COPY: Record<string, { accent: string; what: string; needs: string[] }> = 
   memory: { accent: 'memory', what: 'The graph of places, people and conversations GuideAI has built, which you can browse, correct and delete.', needs: ['Relationship-based memory store', 'Per-node delete'] },
 };
 
-export function FeatureScreen({ route, navigation }: any) {
-  const { key, title } = route.params as { key: string; title: string };
+export function FeatureScreen() {
+  const params = useLocalSearchParams<{ key: string; title?: string }>();
+  const key = params.key;
+  const title = params.title || 'GuideAI';
   const { profile } = useProfile();
   const copy = COPY[key] ?? { accent: 'this feature', what: 'Coming soon.', needs: [] };
 
   useEffect(() => {
     announce(profile, `${title}. ${copy.what}`);
     return () => stopSpeaking();
-  }, [key]);
+  }, [copy.what, profile, title]);
 
   return (
     <Screen
       footer={
-        <Button label="Back to home" tone="glass" onPress={() => navigation.goBack()} />
+        <Button label="Back to home" tone="glass" onPress={() => router.back()} />
       }
     >
       <View style={styles.bar}>
-        <RoundButton icon="chevron-back" label="Back" onPress={() => navigation.goBack()} />
+        <RoundButton icon="chevron-back" label="Back" onPress={() => router.back()} />
       </View>
 
       <Display lead={title} accent={copy.accent} />

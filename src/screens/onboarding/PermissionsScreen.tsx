@@ -1,5 +1,8 @@
-import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
+import { Camera } from 'expo-camera';
+import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Display, GlassCard, Progress, Screen, Text } from '../../components';
 import { TOTAL_STEPS, useDraft } from './draft';
@@ -13,8 +16,9 @@ interface Perm {
 }
 
 /** Step 3: explain every sensor before the system prompts appear. */
-export function PermissionsScreen({ navigation }: any) {
+export function PermissionsScreen() {
   const { draft } = useDraft();
+  const [busy, setBusy] = useState(false);
   const perms: Perm[] = [];
 
   if (hasVisionTrack(draft)) {
@@ -32,24 +36,40 @@ export function PermissionsScreen({ navigation }: any) {
   // De-duplicate camera when both tracks are on.
   const unique = perms.filter((p, i) => perms.findIndex((q) => q.title === p.title) === i);
 
+  const requestPermissions = async () => {
+    setBusy(true);
+    try {
+      const results = [await Camera.requestCameraPermissionsAsync()];
+      if (hasHearingTrack(draft)) results.push(await Camera.requestMicrophonePermissionsAsync());
+      if (hasVisionTrack(draft)) results.push(await Location.requestForegroundPermissionsAsync());
+      if (results.some((result) => result.status !== 'granted')) {
+        Alert.alert('Some access was not allowed', 'GuideAI will keep working and explain how to enable each feature later.');
+      }
+      router.push('/onboarding/ready');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Screen
       footer={
         <View style={{ gap: spacing.sm }}>
           <Button
             label="Allow access"
-            onPress={() => navigation.navigate('Ready')}
+            busy={busy}
+            onPress={requestPermissions}
             hint="iOS will ask you about each one in turn."
           />
-          <Button label="Not now" tone="ghost" onPress={() => navigation.navigate('Ready')} />
+          <Button label="Not now" tone="ghost" onPress={() => router.push('/onboarding/ready')} />
         </View>
       }
     >
       <Progress step={3} total={TOTAL_STEPS} />
       <Display lead="What GuideAI" accent="needs access to" />
       <Text variant="body" muted style={{ marginBottom: spacing.md }}>
-        Everything below is processed on your phone. Nothing is uploaded, and
-        no video is ever stored.
+        Camera frames are not stored by default. Features that use a cloud
+        service will identify it before sending any data.
       </Text>
 
       <View style={{ gap: spacing.sm }}>
@@ -77,7 +97,7 @@ export function PermissionsScreen({ navigation }: any) {
             <Text variant="section">Private memory</Text>
             <Text variant="body" muted>
               GuideAI remembers places, people and conversations so it can say
-              "your usual crossing" instead of starting from zero. That memory
+              your usual crossing instead of starting from zero. That memory
               lives on this device.
             </Text>
           </View>

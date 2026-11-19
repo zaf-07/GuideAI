@@ -1,5 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button, ChoiceCard, Display, Progress, Screen, Text } from '../../components';
 import { useDraft, TOTAL_STEPS } from './draft';
@@ -10,7 +11,7 @@ import { colors, spacing } from '../../theme/tokens';
  * The fork in the road. Everything after this — onboarding steps, home
  * screen, even which features exist — is decided here.
  */
-export function ImpairmentScreen({ navigation }: any) {
+export function ImpairmentScreen() {
   const { draft, set } = useDraft();
   const current: ImpairmentId | undefined = draft.impairments[0];
 
@@ -18,7 +19,7 @@ export function ImpairmentScreen({ navigation }: any) {
 
   const next = () => {
     if (!current) return;
-    navigation.navigate(current === 'hearing' ? 'HearingSetup' : 'VisionSetup');
+    router.push(current === 'vision' ? '/onboarding/vision' : '/onboarding/hearing');
   };
 
   return (
@@ -33,16 +34,16 @@ export function ImpairmentScreen({ navigation }: any) {
       }
     >
       <Progress step={1} total={TOTAL_STEPS} />
-      <Display lead="Let's set up" accent="for you" />
+      <Display lead="How will you" accent="use GuideAI?" />
       <Text variant="body" muted style={{ marginBottom: spacing.md }}>
-        Pick what fits you best. This shapes the whole app — you can change it
-        later in Settings.
+        Choose the experience you want first. You can switch modes later without
+        losing your settings.
       </Text>
 
       <View style={{ gap: spacing.sm }}>
         <ChoiceCard
           title="Blind or low vision"
-          subtitle="Live scene description, obstacle and traffic guidance"
+          subtitle="Voice-first surroundings, reading and walking guidance"
           selected={current === 'vision'}
           onPress={() => choose('vision')}
           hint="Sets up the camera guidance features."
@@ -50,19 +51,19 @@ export function ImpairmentScreen({ navigation }: any) {
         />
         <ChoiceCard
           title="Deaf or hard of hearing"
-          subtitle="Two-way sign language and speech translation"
+          subtitle="Signing, large captions and visual sound alerts"
           selected={current === 'hearing'}
           onPress={() => choose('hearing')}
           hint="Sets up the sign language bridge."
           icon={<MaterialCommunityIcons name="hand-wave-outline" size={28} color={current === 'hearing' ? colors.onLight : colors.lime} />}
         />
         <ChoiceCard
-          title="Deaf-blind"
-          subtitle="Haptic guidance, braille output, tactile signing support"
-          selected={current === 'deafblind'}
-          onPress={() => choose('deafblind')}
-          hint="Sets up both tracks with touch as the main channel."
-          icon={<MaterialCommunityIcons name="vibrate" size={28} color={current === 'deafblind' ? colors.onLight : colors.lime} />}
+          title="Communicate with someone"
+          subtitle="Translate between speech, text and supported signs"
+          selected={current === 'communicator'}
+          onPress={() => choose('communicator')}
+          hint="Sets up conversation tools for a hearing person."
+          icon={<MaterialCommunityIcons name="account-voice" size={28} color={current === 'communicator' ? colors.onLight : colors.lime} />}
         />
       </View>
 

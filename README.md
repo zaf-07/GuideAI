@@ -1,78 +1,76 @@
 # GuideAI
 
-A real-time, privacy-first accessibility app for blind, low-vision, deaf,
-hard-of-hearing and deaf-blind people. Two engines, one app:
+GuideAI is an iPhone-first accessibility companion with three entry modes:
 
-- **Vision** — the camera describes what is around you, with distances and
-  bearings, and guides you through real traffic.
-- **Bridge** — two-way translation between sign language and spoken English.
+- blind or low-vision: spoken setup, scene description, reading and walking assistance;
+- Deaf or hard-of-hearing: signing to speech plus speech to text or a sign avatar;
+- conversation partner: a hearing person can communicate with a Deaf signer without knowing sign language.
 
-Both are backed by a relationship-based memory graph, so the app remembers
-places, people and conversations instead of starting from zero every time.
+There is no account gate. The first launch stores an accessibility profile on
+the phone, and the selected mode can be changed later in Settings.
 
-## Status
+## Current implementation
 
-This commit contains the **shell**: design system, authentication entry,
-the branching onboarding flow, the profile store, the adaptive home screen
-and settings. The camera, sign-recognition and memory engines are not wired
-yet — each feature screen states exactly which pipeline belongs there.
+The repository contains a working Expo SDK 58 application shell with Expo
+Router, persistent local onboarding, the three profiles, adaptive home and
+settings screens, real iOS camera/microphone/location permission requests,
+speech output and haptic support. The production iOS JavaScript bundle builds
+successfully.
 
-## Running it
+Scene understanding, sign recognition, the sign avatar and the encrypted
+nearby two-phone session are intentionally labelled as pipelines still to be
+implemented; the UI does not pretend that placeholder output is real.
+
+## Technology direction
+
+- React Native + TypeScript + Expo SDK 58 for product UI and iteration.
+- Expo Router for file-based navigation under `src/app`.
+- Expo Modules API for Swift code that needs Apple frameworks.
+- AVFoundation + Vision/Core ML for camera and on-device inference.
+- Apple Network framework + Bonjour for nearby discovery and an encrypted,
+  paired conversation channel. A matching short code prevents accidental
+  connection to another nearby user.
+- Speech, SQLite, Location and haptics for supporting accessibility tools.
+
+The full decision and rejected alternatives are in
+[`docs/TECHNOLOGY_DECISION.md`](docs/TECHNOLOGY_DECISION.md).
+
+## Run and verify
 
 ```bash
-npm install
-npx expo start       # scan the QR code with Expo Go on your iPhone
+npm install --legacy-peer-deps
+npm run typecheck
+npm run lint
+npx expo-doctor
+npx expo start
 ```
 
-A native build (needed once the camera engine lands) uses EAS:
+A real-device development build needs the Xcode license accepted and CocoaPods
+installed, then:
 
 ```bash
-npx eas build --platform ios --profile development
+npx expo run:ios --device
 ```
 
-## How the app reshapes itself
-
-`src/state/profile.ts` defines the accessibility profile. One answer in
-onboarding — vision, hearing or deaf-blind — decides:
-
-| | Vision | Hearing | Deaf-blind |
-|---|---|---|---|
-| Onboarding step 2 | sight level, narration style, speech rate | hearing level, sign language, captions | both, with touch as the main channel |
-| Home hero action | Describe my surroundings | Start a conversation | Feel my surroundings |
-| Home tiles | navigate, read, find, faces | captions, practice, phrases, alerts | navigate, tactile bridge, read, memory |
-| Announcements | spoken via `expo-speech` | visual + captions only | haptic patterns |
-
-`RootNavigator` picks one of three mutually exclusive stacks (auth →
-onboarding → app) and keys the app stack on the profile, so completing or
-re-running onboarding remounts the tree rather than leaving screens from the
-previous profile behind.
-
-Settings → **Change my profile** clears the completion stamp, which drops the
-user straight back into onboarding with their current answers pre-filled.
+The generated `ios/` and `android/` directories are ignored. Native settings
+belong in `app.json` or an Expo config plugin so Continuous Native Generation
+can recreate them safely.
 
 ## Layout
 
-```
-src/
-  theme/tokens.ts        colours, radii, type scale, 64pt minimum hit size
-  state/profile.ts       profile type + track predicates
-  state/ProfileContext   persistence (AsyncStorage) and the onboarding gate
-  lib/announce.ts        single announcement path: speech / haptics / VoiceOver
-  components/            Screen, Text + Display, Button, Card, Progress, Header
-  screens/
-    AuthScreen
-    onboarding/          Impairment → Vision|Hearing setup → Permissions → Ready
-    home/HomeScreen      one screen, three shapes
-    FeatureScreen        per-feature placeholder naming the missing engine
-    SettingsScreen
-  navigation/RootNavigator
+```text
+src/app/                    Expo Router routes
+src/screens/onboarding/     mode, preferences, permissions and confirmation
+src/screens/home/           profile-aware home
+src/state/                  local accessibility profile and persistence
+src/lib/announce.ts         non-duplicating speech / VoiceOver announcements
+src/components/             accessible reusable UI
 ```
 
-## Accessibility rules this codebase follows
+## Safety and privacy rules
 
-- Every interactive element is at least 64pt tall and carries an explicit
-  `accessibilityLabel`; hints are full sentences.
-- Text scales to 2.4× system size (1.8× for display headings).
-- Nothing is conveyed by colour alone — selection also changes shape and fill.
-- Announcements go through `announce()` only, so VoiceOver users never hear
-  the same line twice at two different speech rates.
+- GuideAI must never claim a road is safe to cross.
+- Camera frames are not stored by default.
+- A cloud-backed feature must identify the service before data is sent.
+- Nearby conversations require explicit confirmation on both phones.
+- Memory starts local-only and must remain inspectable and deletable.

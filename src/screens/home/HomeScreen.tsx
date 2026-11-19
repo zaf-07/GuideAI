@@ -1,17 +1,18 @@
 import React, { useEffect, useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Display, GlassCard, GreetingBar, Screen, Text } from '../../components';
 import { Action, ActionTile, PrimaryTile } from './tiles';
 import { useProfile } from '../../state/ProfileContext';
-import { hasHearingTrack, hasVisionTrack, isDeafBlind } from '../../state/profile';
+import { hasVisionTrack } from '../../state/profile';
 import { announce } from '../../lib/announce';
 import { colors, spacing } from '../../theme/tokens';
 
 const VISION_PRIMARY: Action = {
   key: 'scene',
   title: 'Describe my surroundings',
-  blurb: 'Live camera narration with distances to everything around you.',
+  blurb: 'Live camera narration with positions and supported proximity cues.',
   icon: 'eye-outline',
   hint: 'Opens the live camera and starts speaking what it sees.',
 };
@@ -31,6 +32,14 @@ const HEARING_PRIMARY: Action = {
   hint: 'Opens the two-way sign language bridge.',
 };
 
+const COMMUNICATOR_PRIMARY: Action = {
+  key: 'bridge',
+  title: 'Start a conversation',
+  blurb: 'Their signing becomes text or speech; your voice becomes text or sign.',
+  icon: 'swap-horizontal-outline',
+  hint: 'Opens the two-way sign language bridge.',
+};
+
 const HEARING_SECONDARY: Action[] = [
   { key: 'captions', title: 'Live captions', blurb: 'Caption the room around you', icon: 'chatbubble-ellipses-outline' },
   { key: 'practice', title: 'Practice mode', blurb: 'Check how clearly you are read', icon: 'school-outline' },
@@ -38,37 +47,15 @@ const HEARING_SECONDARY: Action[] = [
   { key: 'alerts', title: 'Sound alerts', blurb: 'Alarms, doorbells, your name', icon: 'notifications-outline' },
 ];
 
-const DEAFBLIND_PRIMARY: Action = {
-  key: 'scene',
-  title: 'Feel my surroundings',
-  blurb: 'Obstacles and distances as haptic patterns, with braille output.',
-  icon: 'radio-outline',
-  hint: 'Starts haptic scene guidance.',
-};
-
 /**
  * One home screen, three shapes. The profile decides the hero action, the
  * tiles beneath it, and the language used throughout.
  */
-export function HomeScreen({ navigation }: any) {
+export function HomeScreen() {
   const { profile } = useProfile();
   const vision = hasVisionTrack(profile);
-  const hearing = hasHearingTrack(profile);
-  const both = isDeafBlind(profile);
 
   const { primary, secondary, headline } = useMemo(() => {
-    if (both) {
-      return {
-        primary: DEAFBLIND_PRIMARY,
-        secondary: [
-          { key: 'navigate', title: 'Walk with me', blurb: 'Haptic turn-by-turn guidance', icon: 'navigate-outline' } as Action,
-          { key: 'bridge', title: 'Tactile bridge', blurb: 'Signing to braille, both ways', icon: 'swap-horizontal-outline' } as Action,
-          { key: 'read', title: 'Read this', blurb: 'Text to braille or speech', icon: 'document-text-outline' } as Action,
-          { key: 'memory', title: 'Memory', blurb: 'Places and people you know', icon: 'git-network-outline' } as Action,
-        ],
-        headline: { lead: 'Everything,', accent: 'through touch' },
-      };
-    }
     if (vision) {
       return {
         primary: VISION_PRIMARY,
@@ -77,24 +64,24 @@ export function HomeScreen({ navigation }: any) {
       };
     }
     return {
-      primary: HEARING_PRIMARY,
+      primary: profile.impairments.includes('communicator') ? COMMUNICATOR_PRIMARY : HEARING_PRIMARY,
       secondary: HEARING_SECONDARY,
       headline: { lead: 'Speak freely,', accent: 'be understood' },
     };
-  }, [vision, hearing, both]);
+  }, [profile.impairments, vision]);
 
   useEffect(() => {
     announce(profile, `Home. ${primary.title} is the first button.`);
-  }, [primary.key]);
+  }, [primary.title, profile]);
 
   const open = (key: string, title: string) =>
-    navigation.navigate('Feature', { key, title });
+    router.push({ pathname: '/feature/[key]', params: { key, title } });
 
   return (
     <Screen>
       <GreetingBar
         name={profile.displayName || 'there'}
-        onSettings={() => navigation.navigate('Settings')}
+        onSettings={() => router.push('/settings')}
       />
 
       <View style={{ paddingTop: spacing.lg, paddingBottom: spacing.sm }}>

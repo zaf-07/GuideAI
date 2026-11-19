@@ -1,28 +1,15 @@
 import { AccessibilityInfo, Platform } from 'react-native';
 import * as Speech from 'expo-speech';
-import * as Haptics from 'expo-haptics';
-import { Profile, hasVisionTrack, isDeafBlind } from '../state/profile';
+import { Profile, hasVisionTrack } from '../state/profile';
 
 /**
  * One announcement path for the whole app.
  *  - Blind / low-vision users hear it spoken at their chosen rate.
- *  - Deaf-blind users get a haptic pattern instead of speech; captions and
- *    (later) a braille-display route carry the text.
- *  - Everyone also gets it on the platform screen-reader queue, so VoiceOver
- *    users never hear it twice at different rates.
+ *  - Blind / low-vision mode uses the configured GuideAI voice.
+ *  - Other modes only enqueue the message for an enabled screen reader.
+ * Keeping these paths exclusive avoids two voices speaking over one another.
  */
 export function announce(profile: Profile, message: string, opts?: { urgent?: boolean }) {
-  if (isDeafBlind(profile)) {
-    if (profile.haptics) {
-      Haptics.notificationAsync(
-        opts?.urgent
-          ? Haptics.NotificationFeedbackType.Warning
-          : Haptics.NotificationFeedbackType.Success,
-      ).catch(() => {});
-    }
-    return;
-  }
-
   if (hasVisionTrack(profile)) {
     if (opts?.urgent) Speech.stop();
     Speech.speak(message, {
@@ -30,9 +17,7 @@ export function announce(profile: Profile, message: string, opts?: { urgent?: bo
       pitch: 1,
       language: 'en-US',
     });
-  }
-
-  if (Platform.OS !== 'web') {
+  } else if (Platform.OS !== 'web') {
     AccessibilityInfo.announceForAccessibility(message);
   }
 }

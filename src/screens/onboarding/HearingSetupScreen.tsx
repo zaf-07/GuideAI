@@ -1,8 +1,9 @@
 import React from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
+import { router } from 'expo-router';
 import { Button, ChoiceCard, Chip, Display, GlassCard, Progress, Screen, Text } from '../../components';
 import { TOTAL_STEPS, useDraft } from './draft';
-import { HearingLevel, SignLanguage } from '../../state/profile';
+import { HearingLevel, ReplyFormat, SignLanguage } from '../../state/profile';
 import { colors, spacing } from '../../theme/tokens';
 
 const LEVELS: { id: HearingLevel; title: string; subtitle: string }[] = [
@@ -14,27 +15,28 @@ const LEVELS: { id: HearingLevel; title: string; subtitle: string }[] = [
 const LANGS: SignLanguage[] = ['ASL', 'BSL', 'ISL', 'LSF', 'other'];
 
 /** Step 2 for the hearing track: level, signing language, caption style. */
-export function HearingSetupScreen({ navigation }: any) {
+export function HearingSetupScreen() {
   const { draft, set } = useDraft();
+  const communicator = draft.impairments.includes('communicator');
 
   return (
     <Screen
       footer={
         <Button
           label="Continue"
-          disabled={!draft.hearingLevel || !draft.signLanguage}
-          onPress={() => navigation.navigate('Permissions')}
+          disabled={(!communicator && !draft.hearingLevel) || !draft.signLanguage}
+          onPress={() => router.push('/onboarding/permissions')}
         />
       }
     >
       <Progress step={2} total={TOTAL_STEPS} />
       <Display lead="How do you" accent="communicate?" />
       <Text variant="body" muted style={{ marginBottom: spacing.md }}>
-        The bridge translates signing into spoken English, and the other
-        person's speech back into sign.
+        GuideAI translates supported signing into text or speech, and spoken
+        replies into the format selected below.
       </Text>
 
-      <View style={{ gap: spacing.sm }}>
+      {!communicator ? <View style={{ gap: spacing.sm }}>
         {LEVELS.map((l) => (
           <ChoiceCard
             key={l.id}
@@ -44,7 +46,7 @@ export function HearingSetupScreen({ navigation }: any) {
             onPress={() => set({ hearingLevel: l.id })}
           />
         ))}
-      </View>
+      </View> : null}
 
       <GlassCard style={{ marginTop: spacing.md }}>
         <Text variant="section">Your sign language</Text>
@@ -59,7 +61,23 @@ export function HearingSetupScreen({ navigation }: any) {
           ))}
         </View>
         <Text variant="caption" faint>
-          Recognition models are downloaded per language and run on device.
+          The first demo targets a clearly disclosed supported ASL vocabulary.
+        </Text>
+      </GlassCard>
+
+      <GlassCard>
+        <Text variant="section">Show spoken replies as</Text>
+        <View style={styles.chips}>
+          {([
+            ['text', 'Text'],
+            ['avatar', 'Sign avatar'],
+            ['both', 'Both'],
+          ] as [ReplyFormat, string][]).map(([value, label]) => (
+            <Chip key={value} label={label} active={draft.replyFormat === value} onPress={() => set({ replyFormat: value })} />
+          ))}
+        </View>
+        <Text variant="caption" faint>
+          Unsupported phrases always remain available as text.
         </Text>
       </GlassCard>
 

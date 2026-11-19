@@ -1,11 +1,12 @@
 /** Domain types for the accessibility profile that reshapes the whole app. */
 
-export type ImpairmentId = 'vision' | 'hearing' | 'deafblind';
+export type ImpairmentId = 'vision' | 'hearing' | 'communicator';
 
 export type VisionLevel = 'low_vision' | 'legally_blind' | 'totally_blind';
 export type HearingLevel = 'hard_of_hearing' | 'deaf' | 'profoundly_deaf';
 export type SignLanguage = 'ASL' | 'BSL' | 'ISL' | 'LSF' | 'other';
 export type Guidance = 'concise' | 'detailed';
+export type ReplyFormat = 'text' | 'avatar' | 'both';
 
 export interface Profile {
   /** Primary impairments. `deafblind` implies both tracks are active. */
@@ -21,6 +22,8 @@ export interface Profile {
   haptics: boolean;
   /** Large, high-contrast captions for every spoken line. */
   captions: boolean;
+  /** How spoken replies are presented to a signing user. */
+  replyFormat: ReplyFormat;
   /** Keep the memory graph on-device only. */
   localOnlyMemory: boolean;
   displayName?: string;
@@ -33,23 +36,24 @@ export const DEFAULT_PROFILE: Profile = {
   speechRate: 1,
   haptics: true,
   captions: true,
+  replyFormat: 'both',
   localOnlyMemory: true,
 };
 
 export const hasVisionTrack = (p: Profile) =>
-  p.impairments.includes('vision') || p.impairments.includes('deafblind');
+  p.impairments.includes('vision');
 
 export const hasHearingTrack = (p: Profile) =>
-  p.impairments.includes('hearing') || p.impairments.includes('deafblind');
+  p.impairments.includes('hearing') || p.impairments.includes('communicator');
 
-export const isDeafBlind = (p: Profile) => p.impairments.includes('deafblind');
+export const isDeafBlind = (_p: Profile) => false;
 
 /** Blind users get audio-first affordances; deaf users get visual-first ones. */
 export const prefersAudioFirst = (p: Profile) =>
-  hasVisionTrack(p) && !p.impairments.includes('deafblind');
+  hasVisionTrack(p);
 
 export const IMPAIRMENT_LABEL: Record<ImpairmentId, string> = {
   vision: 'Blind or low vision',
   hearing: 'Deaf or hard of hearing',
-  deafblind: 'Deaf-blind',
+  communicator: 'Communicate with someone',
 };

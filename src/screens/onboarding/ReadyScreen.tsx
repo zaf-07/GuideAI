@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Button, Display, GlassCard, Progress, Screen, Text } from '../../components';
 import { TOTAL_STEPS, useDraft } from './draft';
@@ -18,7 +19,7 @@ export function ReadyScreen() {
 
   useEffect(() => {
     announce(draft, 'Setup complete. Review your choices, then tap Open GuideAI.');
-  }, []);
+  }, [draft]);
 
   const lines: string[] = [];
   draft.impairments.forEach((i) => lines.push(IMPAIRMENT_LABEL[i]));
@@ -27,6 +28,7 @@ export function ReadyScreen() {
   }
   if (hasHearingTrack(draft) && draft.signLanguage) {
     lines.push(`${draft.signLanguage === 'other' ? 'Custom' : draft.signLanguage} sign language bridge`);
+    lines.push(`Replies shown as ${draft.replyFormat === 'both' ? 'text and sign avatar' : draft.replyFormat}`);
   }
   if (draft.haptics) lines.push('Haptic proximity feedback on');
   if (draft.captions) lines.push('Large captions on');
@@ -37,7 +39,10 @@ export function ReadyScreen() {
         <Button
           label="Open GuideAI"
           tone="lime"
-          onPress={() => completeOnboarding(draft)}
+          onPress={async () => {
+            await completeOnboarding(draft);
+            router.replace('/home');
+          }}
           hint="Finishes setup and opens your home screen."
         />
       }

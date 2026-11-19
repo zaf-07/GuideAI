@@ -1,15 +1,16 @@
 import React from 'react';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { ProfileProvider } from './src/state/ProfileContext';
-import { RootNavigator } from './src/navigation/RootNavigator';
+import { ProfileProvider } from '../state/ProfileContext';
+import { colors } from '../theme/tokens';
 
-export default function App() {
+export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ProfileProvider>
         <StatusBar style="light" />
-        <RootNavigator />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.canvas } }} />
       </ProfileProvider>
     </SafeAreaProvider>
   );
